@@ -20,6 +20,11 @@ local SHOW_LOADING = true -- true = បង្ហាញ Loading ពេញអេ�
 local STEAL_TIMEOUT = 8   -- Steal Egg: រង់ចាំ Confirm អតិបរមា (វិនាទី) បើលើសនេះ ឈប់ Glitch ហើយត្រឡប់
 local CONFIRM_DELAY = 0.4 -- Steal Egg: Glitch បន្តបន្ទាប់ពី Confirm បានបន្តិច ដើម្បីប្រាកដ
 local EGG_KEYWORD = "egg" -- ឈ្មោះ Egg ក្នុង Backpack/Character (ពាក្យដែលមាននៅក្នុងឈ្មោះ)
+local USE_FOREST = true   -- Steal Egg: ទៅ Forest (Egg ធ្លាក់) → Steal វិញ → ទៅ SafeZone
+local FOREST_NAME = "Forest" -- ឈ្មោះតំបន់ Forest ក្នុង Workspace (World.Areas.Forest)
+local FOREST_WAIT = 3        -- រង់ចាំ Egg ធ្លាក់ក្នុង Forest (វិនាទី)
+local FOREST_RADIUS = 80     -- ចម្ងាយស្វែងរក Prompt របស់ Egg ដែលធ្លាក់ (studs)
+local RESTEAL_TIMEOUT = 3    -- រង់ចាំ Confirm ពេល Steal វិញ (វិនាទី)
 local ACCENT_1 = Color3.fromRGB(140, 90, 255)
 local ACCENT_2 = Color3.fromRGB(60, 160, 255)
 local ON_COLOR = Color3.fromRGB(60, 220, 130)
@@ -658,11 +663,166 @@ local function eggConfirmed(snapshot)
     return false
 end
 
+-- ===== Forest: Egg ធ្លាក់ → Steal វិញ =====
+local function hasEggByName()
+    local backpack = player:FindFirstChildOfClass("Backpack")
+    local char = player.Character
+    for _, container in ipairs({backpack, char}) do
+        if container then
+            for _, inst in ipairs(container:GetChildren()) do
+                if string.find(string.lower(inst.Name), EGG_KEYWORD, 1, true) then
+                    return true
+                end
+            end
+        end
+    end
+    return false
+end
+
+local function getForestCFrame()
+    local node
+    local world = Workspace:FindFirstChild("World")
+    local areas = world and world:FindFirstChild("Areas")
+    node = areas and areas:FindFirstChild(FOREST_NAME)
+
+    if not node then
+        local want = string.lower(FOREST_NAME)
+        for _, inst in ipairs(Workspace:GetDescendants()) do
+            if string.lower(inst.Name) == want and (inst:IsA("BasePart") or inst:IsA("Model") or inst:IsA("Folder")) then
+                node = inst
+                break
+            end
+        end
+    end
+    if not node then return nil end
+
+    local up = Vector3.new(0, 5, 0)
+    if node:IsA("BasePart") then
+        return node.CFrame + up
+    elseif node:IsA("Model") then
+        return node:GetPivot() + up
+    else
+        local sum, n = Vector3.new(0, 0, 0), 0
+        for _, d in ipairs(node:GetDescendants()) do
+            if d:IsA("BasePart") then
+                sum += d.Position
+                n += 1
+            end
+        end
+        if n > 0 then return CFrame.new(sum / n + up) end
+    end
+    return nil
+end
+
+local function collectPrompts()
+    local set = {}
+    for _, inst in ipairs(Workspace:GetDescendants()) do
+        if inst:IsA("ProximityPrompt") then set[inst] = true end
+    end
+    return set
+end
+
+local function promptPosition(prompt)
+    local par = prompt.Parent
+    if not par then return nil end
+    if par:IsA("BasePart") then return par.Position end
+    if par:IsA("Attachment") then return par.WorldPosition end
+    if par:IsA("Model") then return par:GetPivot().Position end
+    local part = par:FindFirstAncestorWhichIsA("BasePart")
+    return part and part.Position or nil
+end
+
+-- រក Prompt ថ្មីដែលលេចឡើងក្បែរ Forest (Egg ដែលធ្លាក់)
+local function findDroppedPrompt(snapshot, nearPos)
+    local best, bestDist = nil, FOREST_RADIUS
+    for _, inst in ipairs(Workspace:GetDescendants()) do
+        if inst:IsA("ProximityPrompt") and not snapshot[inst] then
+            local pos = promptPosition(inst)
+            if pos then
+                local d = (pos - nearPos).Magnitude
+                if d < bestDist then
+                    best, bestDist = inst, d
+                end
+            end
+        end
+    end
+    return best
+end
+
+local function fireEggPrompt(prompt)
+    task.spawn(function()
+        if fireproximityprompt then
+            pcall(fireproximityprompt, prompt)
+        else
+            pcall(function()
+                prompt:InputHoldBegin()
+                task.wait((prompt.HoldDuration or 0) + 0.05)
+                prompt:InputHoldEnd()
+            end)
+        end
+    end)
+end
+
+local function forestSequence(rootPart)
+    local forestCF = getForestCFrame()
+    if not forestCF then
+        warn("[Steal Egg] រកមិនឃើញ Forest (ពិនិត្យ FOREST_NAME)")
+        return false
+    end
+
+    -- ១. ទៅ Forest → Egg ធ្លាក់ដោយខ្លួនឯង
+    LoadSub.Text = "OLIVER v3 • Dropping at Forest"
+    local promptSnap = collectPrompts()
+    goTo(rootPart, forestCF, TWEEN_TIME)
+
+    local dropPrompt
+    local t0 = os.clock()
+    while os.clock() - t0 < FOREST_WAIT do
+        if not rootPart.Parent then return false end
+        rootPart.CFrame = forestCF
+        rootPart.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+        dropPrompt = findDroppedPrompt(promptSnap, forestCF.Position)
+        if dropPrompt then break end
+        task.wait(0.1)
+    end
+    if not dropPrompt then
+        warn("[Steal Egg] មិនឃើញ Prompt របស់ Egg ដែលធ្លាក់ក្នុង Forest")
+        return false
+    end
+    print("[Steal Egg] Dropped egg prompt: " .. dropPrompt:GetFullName())
+
+    -- ២. Steal វិញ (ចុច Prompt លើ Egg ដែលទម្លាក់)
+    LoadSub.Text = "OLIVER v3 • Stealing again"
+    local pos = promptPosition(dropPrompt)
+    if pos then
+        goTo(rootPart, CFrame.new(pos + Vector3.new(0, 3, 0)), TWEEN_TIME)
+    end
+
+    local eggSnap = collectEggItems()
+    local hadEgg = hasEggByName()
+    local t1 = os.clock()
+    local nextFire = 0
+    while os.clock() - t1 < RESTEAL_TIMEOUT do
+        if not rootPart.Parent then return false end
+        if os.clock() >= nextFire then
+            nextFire = os.clock() + 0.6
+            fireEggPrompt(dropPrompt)
+        end
+        if eggConfirmed(eggSnap) or (not hadEgg and hasEggByName()) then
+            print("[Steal Egg] Re-steal OK")
+            return true
+        end
+        task.wait(0.1)
+    end
+    warn("[Steal Egg] Re-steal timeout")
+    return false
+end
+
 local function runAntiGuard(rootPart, safeZone, stealMode)
     busy = true
     if stealMode then
         LoadSub.Text = "OLIVER v3 • Confirming Egg"
-        showLoading(3)
+        showLoading(4)
     else
         LoadSub.Text = "OLIVER v3 • Moving to SafeZone"
         showLoading(TWEEN_TIME + STAY_TIME + RETURN_TIME)
@@ -689,6 +849,13 @@ local function runAntiGuard(rootPart, safeZone, stealMode)
     local confirmed = false
     local nextCheck = 0
 
+    -- (Steal Egg) ទៅ Forest ទម្លាក់ Egg → Steal វិញ មុនទៅ SafeZone
+    if stealMode and USE_FOREST then
+        local okF, errF = pcall(forestSequence, rootPart)
+        if not okF then warn("[Steal Egg] Forest error: " .. tostring(errF)) end
+        LoadSub.Text = "OLIVER v3 • Confirming Egg"
+    end
+
     -- ១. ទៅ SafeZone លឿន (ដូច Teleport)
     goTo(rootPart, target, TWEEN_TIME)
 
@@ -703,6 +870,9 @@ local function runAntiGuard(rootPart, safeZone, stealMode)
         if stealMode and not confirmed and os.clock() >= nextCheck then
             nextCheck = os.clock() + 0.1
             local ok, inst = eggConfirmed(snapshot)
+            if not ok and hasEggByName() then
+                ok, inst = true, {Name = "(Egg ក្នុង Inventory)"}
+            end
             if ok then
                 confirmed = true
                 limit = (os.clock() - t0) + CONFIRM_DELAY
