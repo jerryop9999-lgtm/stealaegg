@@ -1089,6 +1089,14 @@ end
 -- ប្រើ Module/Remote របស់ហ្គេមផ្ទាល់ (EggState, EggWorld) ដើម្បីរក Egg → ទៅយក → ទៅ SafeZone
 local autoStealActive = false
 local autoStealToken = 0
+local autoBusy = false -- true ពេល Auto Steal កំពុងធ្វើដំណើរ (ដើម្បីបញ្ឈប់ភ្លាមៗពេលបិទ)
+
+local function setAutoStatus(txt)
+    if autoStealActive then
+        Status.Text = "Auto Steal: " .. txt
+        Status.TextColor3 = ON_COLOR
+    end
+end
 local carrying = false
 local carryInflight = false
 local EggStateMod, EggWorldRemote, ResetWallMod, AssetsMod, CycleMod, EggRecordsMod, AreaEggSlotIdentityMod
@@ -1389,6 +1397,14 @@ local function inSafeArea(root)
     return Vector2.new(d.X, d.Z).Magnitude <= SAFE_RADIUS and math.abs(d.Y) <= 18
 end
 
+-- ចំណុចឈរលើ Egg: BottomCFrame + កម្ពស់ជើង (HipHeight + ពាក់កណ្ដាល Root) ដូច SenaHub
+local function eggDestination(root, rec)
+    local hum = root.Parent and root.Parent:FindFirstChildOfClass("Humanoid")
+    local feet = 3
+    if hum then feet = math.max(hum.HipHeight + root.Size.Y / 2, 3) end
+    return CFrame.new(rec.BottomCFrame.Position + Vector3.new(0, feet + 0.15, 0))
+end
+
 local function legTime(a, b)
     return math.max((a - b).Magnitude / AUTO_STEAL_SPEED, 0.03)
 end
@@ -1415,7 +1431,8 @@ local function travel(root, cf, onNear)
         root.CFrame = cf
     elseif mode == "Fly" then
         local from, to = root.Position, cf.Position
-        local cruiseY = math.max(from.Y, to.Y + 5, SAFE_POS.Y + 5)
+        -- ហោះកម្ពស់ 110 បើគោលដៅទាប (ដូច SenaHub) បើខ្ពស់ជាងនេះ ហោះលើគោលដៅបន្តិច
+        local cruiseY = math.max(from.Y, (to.Y >= 104) and (to.Y + 5) or 110)
         local up = Vector3.new(from.X, cruiseY, from.Z)
         local over = Vector3.new(to.X, cruiseY, to.Z)
         goTo(root, CFrame.new(up), legTime(from, up))
@@ -1485,7 +1502,12 @@ local function autoStealStep()
     if busy then return end
     local char = player.Character
     local root = char and char:FindFirstChild("HumanoidRootPart")
-    if not root then return end
+    local hum0 = char and char:FindFirstChildOfClass("Humanoid")
+    if not root or not hum0 or hum0.Health <= 0 then
+        setAutoStatus("Waiting for character")
+        task.wait(0.5)
+        return
+    end
 
     if not loadEggModules() then
         if not warnedModules then
@@ -1495,16 +1517,23 @@ local function autoStealStep()
         task.wait(2)
         return
     end
-    if wallSealed() then return end
+    if wallSealed() then
+        setAutoStatus("Waiting for reset wall")
+        return
+    end
 
     -- កំពុងសែង Egg → ត្រឡប់ទៅ Safe
     if carrying then
         if not inSafeArea(root) then
+            setAutoStatus("Returning to safe zone")
             busy = true
+            autoBusy = true
             local ok, err = pcall(travel, root, getSafeCFrame(root), nil)
+            autoBusy = false
             busy = false
             if not ok then warn("[Auto Steal] Deliver error: " .. tostring(err)) end
         end
+        setAutoStatus("Delivering egg")
         local t0 = os.clock()
         while autoStealActive and carrying and os.clock() - t0 < 4 do
             task.wait(0.1)
@@ -1515,6 +1544,7 @@ local function autoStealStep()
     -- រក Egg តាម Filter
     local uid, rec = pickTarget(root.Position)
     if not rec then
+        setAutoStatus("No matching eggs")
         task.wait(0.4)
         return
     end
@@ -1524,25 +1554,38 @@ local function autoStealStep()
         (rec.BottomCFrame.Position - root.Position).Magnitude, AUTO_CFG.Mode))
 
     busy = true
+    autoBusy = true
     local ok, err = pcall(function()
+        local dest = eggDestination(root, rec)
+        setAutoStatus("Going to " .. tostring(nameOf(rec)))
+
         -- ទៅរក Egg ហើយស្នើ Carry មុនទៅដល់ (ក្នុង 8 studs)
-        travel(root, rec.BottomCFrame + Vector3.new(0, 3, 0), function()
+        travel(root, dest, function()
             task.spawn(requestCarry, uid, rec)
         end)
 
-        -- ស្នើម្តងទៀតរហូតដល់បញ្ជាក់ថាបានយក (ពី record)
+        -- ជាប់នៅលើ Egg រហូតដល់បញ្ជាក់ថាបានយក (ពី record) ដូច "arrival hold" របស់ SenaHub
+        setAutoStatus("Securing egg")
         local deadline = os.clock() + AUTO_STEAL_CARRY_TIMEOUT
         while autoStealActive and not carrying and os.clock() < deadline do
+            if not root.Parent then break end
             if isMyCarry(uid) then
-                carrying = true
-                break
+                task.wait(0.25) -- បញ្ជាក់ម្តងទៀតមុនចេញដំណើរ
+                if isMyCarry(uid) then
+                    carrying = true
+                    break
+                end
             end
             if not carryInflight then
                 task.spawn(requestCarry, uid, rec)
             end
-            task.wait(0.1)
+            root.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+            root.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+            root.CFrame = dest
+            task.wait()
         end
     end)
+    autoBusy = false
     busy = false
     if not ok then warn("[Auto Steal] Error: " .. tostring(err)) end
     if not carrying then
@@ -1604,6 +1647,9 @@ AutoBtn.MouseButton1Click:Connect(function()
     refreshStatus()
     if autoStealActive then
         task.spawn(autoStealLoop, autoStealToken)
+    elseif autoBusy and currentTween then
+        -- បិទ Auto Steal ពេលកំពុងធ្វើដំណើរ → បញ្ឈប់ Tween ភ្លាមៗ
+        pcall(function() currentTween:Cancel() end)
     end
 end)
 
