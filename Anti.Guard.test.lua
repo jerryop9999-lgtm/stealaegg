@@ -416,13 +416,12 @@ LoadingGui.DisplayOrder = 999
 LoadingGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 LoadingGui.Parent = guiParent
 
-local Loading = Instance.new("CanvasGroup")
+local Loading = Instance.new("Frame")
 Loading.Name = "Loading"
 Loading.Size = UDim2.new(1, 0, 1, 0)
 Loading.BackgroundColor3 = Color3.fromRGB(8, 8, 16)
 Loading.BackgroundTransparency = 0 -- មិនថ្លា (ងងឹតពេញ)
 Loading.BorderSizePixel = 0
-Loading.GroupTransparency = 1
 Loading.Visible = false
 Loading.Parent = LoadingGui
 
@@ -488,7 +487,6 @@ local function showLoading(duration)
     if not SHOW_LOADING then return end
     loadingToken += 1
     Loading.Visible = true
-    TweenService:Create(Loading, TweenInfo.new(0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {GroupTransparency = 0}):Play()
 
     BarFill.Size = UDim2.new(0, 0, 1, 0)
     TweenService:Create(BarFill, TweenInfo.new(duration, Enum.EasingStyle.Linear), {Size = UDim2.new(1, 0, 1, 0)}):Play()
@@ -503,18 +501,11 @@ end
 local function hideLoading()
     if not SHOW_LOADING then return end
     loadingToken += 1
-    local token = loadingToken
-    local t = TweenService:Create(Loading, TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {GroupTransparency = 1})
-    t:Play()
-    t.Completed:Connect(function()
-        if token == loadingToken then
-            Loading.Visible = false
-            if loadingConn then
-                loadingConn:Disconnect()
-                loadingConn = nil
-            end
-        end
-    end)
+    Loading.Visible = false
+    if loadingConn then
+        loadingConn:Disconnect()
+        loadingConn = nil
+    end
 end
 
 local antiGuardActive = false
