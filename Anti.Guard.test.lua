@@ -91,6 +91,9 @@ do
 	if type(genv.__SenaV4AntiGuardCleanup) == "function" then
 		pcall(genv.__SenaV4AntiGuardCleanup)
 	end
+	if type(genv.__SenaZinAntiGuardCleanup) == "function" then
+		pcall(genv.__SenaZinAntiGuardCleanup)
+	end
 
 	genv.__SenaV4TweenRuntimeGeneration = (genv.__SenaV4TweenRuntimeGeneration or 0) + 1
 	__SenaV4TweenRuntimeGeneration = genv.__SenaV4TweenRuntimeGeneration
@@ -1016,6 +1019,12 @@ senaV4Config.getAreaEggValue = function(p37, p38)
 	})
 end
 
+local function v172(p39)
+	local max = math.max
+	local StealPriorityUntil = senaV4Config.StealPriorityUntil or 0
+
+	senaV4Config.StealPriorityUntil = max(StealPriorityUntil, os.clock() + (p39 or 5))
+end
 
 local AreaEggCycle
 local AreaEggResetWall2
@@ -1063,6 +1072,47 @@ do
 	local n6 = 0
 	local u185 = false
 
+	local function v186()
+		if v177() then
+			return false
+		end
+
+		local now = os.clock()
+
+		if now - n6 < 0.35 then
+			return u185
+		end
+
+		n6 = now
+
+		local ReplicatedStorage2 = game:GetService("ReplicatedStorage")
+		local v189 = require(ReplicatedStorage2.Client.EggState).GetAreaEggSnapshot()
+		local Directory = require(ReplicatedStorage2.Data.Assets).Directory
+		local pairs_ = pairs
+		local Records = v189 and v189.Records or {}
+
+		for _, Record in pairs_(Records) do
+			if Record.State ~= "Slot" and Record.State ~= "Dropped" or not Record.BottomCFrame then
+				continue
+			end
+
+			local v195 = Directory[Record.AssetCategory]
+			local Rarity = v195 and v195.Rarity
+			local DisplayName = Rarity and (Rarity.DisplayName or Rarity._id)
+
+			if DisplayName ~= "Eternal" and DisplayName ~= "Divine" then
+				continue
+			end
+
+			u185 = true
+
+			return true
+		end
+
+		u185 = false
+
+		return false
+	end
 end
 
 local function v198()
@@ -1088,6 +1138,35 @@ local function v198()
 end
 
 do
+	local function v200(p40)
+		pcall(function()
+			if typeof(writefile) ~= "function" then
+				return
+			end
+
+			local s1 = ""
+
+			if typeof(readfile) == "function" and typeof(isfile) == "function" and isfile("Sena_Disconnect_Log.txt") then
+				s1 = readfile("Sena_Disconnect_Log.txt") or ""
+			end
+
+			local t5 = {}
+
+			for match in s1:gmatch("[^\r\n]+") do
+				table.insert(t5, match)
+			end
+
+			local v204 = "] " .. p40
+
+			table.insert(t5, "[" .. os.date("%Y-%m-%d %H:%M:%S") .. v204)
+
+			while #t5 > 50 do
+				table.remove(t5, 1)
+			end
+
+			writefile("Sena_Disconnect_Log.txt", table.concat(t5, "\n"))
+		end)
+	end
 end
 
 local function v205(p41)
@@ -1197,6 +1276,72 @@ local t8 = {
 	capNotifiedFor = -1
 }
 
+local function v220()
+	if not t8.maxGuardWalkSpeed then
+		local ok, result = pcall(function()
+			return require(game:GetService("ReplicatedStorage").Data.Guards).GetHighestWalkSpeed()
+		end)
+
+		t8.maxGuardWalkSpeed = ok and type(result) == "number" and result > 0 and result or t8.GUARD_FALLBACK
+		warn(string.format("[GuardEscape] Guard tercepat %d stud/detik -> lantai kabur %d stud/detik", t8.maxGuardWalkSpeed, t8.maxGuardWalkSpeed * t8.GUARD_MARGIN))
+	end
+
+	return t8.maxGuardWalkSpeed * t8.GUARD_MARGIN
+end
+local function v223(p49)
+	local tweenSpeedMultiplier = math.clamp(math.floor((tonumber(p49) or t1.DEF_INPUT) + 0.5), t1.MIN_INPUT, t1.MAX_INPUT)
+
+	if math.abs((senaV4Config.TweenSpeedMultiplier or 0) - tweenSpeedMultiplier) <= 0.001 then
+		return
+	end
+
+	senaV4Config.TweenSpeedMultiplier = tweenSpeedMultiplier
+end
+local function v225(p50, p51, p52, p53)
+	local v226 = os.clock() + p52
+	local now
+	local n7 = 0
+	local n8 = 0.1
+
+	pcall(function()
+		n8 = LocalPlayer:GetNetworkPing()
+	end)
+
+	local v230 = math.clamp(n8 * 2 + 0.2, 0.4, 1)
+
+	while true do
+		if not (os.clock() < v226) then
+			return false
+		end
+
+		if p53 and p53() then
+			break
+		end
+
+		p50.AssemblyLinearVelocity = Vector3.zero
+		p50.AssemblyAngularVelocity = Vector3.zero
+		RunService.Heartbeat:Wait()
+
+		if not ((p50.Parent and (p50.Position - p51.Position).Magnitude or math.huge) <= 1.5) then
+			now = nil
+			n7 = 0
+
+			continue
+		end
+
+		p50.CFrame = p51
+		now = now or os.clock()
+		n7 += 1
+
+		if not (n7 >= 3) or not (v230 <= os.clock() - now) then
+			continue
+		end
+
+		return true
+	end
+
+	return false
+end
 
 local t9 = {}
 
@@ -1370,6 +1515,9 @@ local function v232(p54, p55, p56, p57, p58, p59, p60)
 	local v265 = v247 and not t10.cancelled
 
 	return v265
+end
+local function v266(p61, p62, p63, p64)
+	return v232(p61, p62, p63, p64, false, nil, true)
 end
 local function v267(p65, p66)
 	if p65 then
@@ -2109,13 +2257,62 @@ do
 end
 
 do
+	local function v384()
+		local v385 = v287()
+
+		if v385 == false then
+			u286 = nil
+
+			return true
+		end
+
+		if v385 == nil and u286 == nil then
+			return true
+		end
+
+		u286 = u286 or "server"
+
+		local v386, v387 = v290()
+
+		if not v386 then
+			warn("[Treadmill] Gagal minta lepas dari treadmill sebelum steal:", v387)
+
+			return false
+		end
+
+		local v388 = os.clock() + 1.5
+
+		while u286 ~= nil and os.clock() < v388 do
+			task.wait(0.05)
+
+			if not senaV4Config.AutoSteal then
+				return false
+			end
+
+			if v287() == false then
+				u286 = nil
+
+				break
+			end
+		end
+
+		if u286 ~= nil then
+			warn("[Treadmill] Lepas treadmill gak kekonfirmasi dalam 1.5s, steal dilanjut apa adanya.")
+
+			return false
+		end
+
+		task.wait(0.12)
+
+		return true
+	end
 end
 
 if type(genv.__SenaV4DecomBoostCleanup) == "function" then
 	pcall(genv.__SenaV4DecomBoostCleanup)
 end
 
-local t15
+local t15, v390, v391
 
 do
 	local t16 = {}
@@ -2132,6 +2329,70 @@ do
 		u393 = false
 	end
 
+	local function v396()
+		local ClientRenderedAssets = workspace:FindFirstChild("ClientRenderedAssets")
+
+		if not ClientRenderedAssets then
+			return
+		end
+
+		for _, child in ipairs(ClientRenderedAssets:GetChildren()) do
+			pcall(function()
+				child.Parent = nil
+			end)
+		end
+	end
+	local function v400(p82)
+		return string.sub(p82.Name, 1, #tostring(LocalPlayer.UserId) + 1) == tostring(LocalPlayer.UserId) .. "_"
+	end
+	local function v401()
+		for _, child in ipairs(workspace:GetChildren()) do
+			if child.Name == "PlacedEggRenders" then
+				for _, child2 in ipairs(child:GetChildren()) do
+					pcall(function()
+						if not child2:FindFirstChildOfClass("ProximityPrompt") then
+							if not v400(child2) then
+								child2.Parent = nil
+							end
+						end
+					end)
+				end
+			end
+		end
+	end
+	local function v406()
+		for _, v in ipairs({
+			"Transient",
+			"__DEBRIS"
+		}) do
+			local v409 = workspace:FindFirstChild(v)
+
+			if v409 then
+				for _, child in ipairs(v409:GetChildren()) do
+					if child.Name ~= "PlayerTrap" then
+						if not child.Name:lower():find("trap") then
+							continue
+						end
+					end
+
+					pcall(function()
+						child:Destroy()
+					end)
+				end
+			end
+		end
+	end
+	local function v412(p83)
+		if not p83:FindFirstAncestor("SenaVisualBack") then
+			if not p83:FindFirstAncestor("SenaVisualRemote") then
+				local Tool = p83:FindFirstAncestorWhichIsA("Tool")
+
+				return Tool ~= nil and Tool:GetAttribute("SenaVisual") ~= nil
+			end
+		end
+
+		return true
+	end
 
 	t15 = {
 		effects = {},
@@ -2153,9 +2414,285 @@ do
 		OfflineMoneyClaimBillboard = true
 	}
 
+	local function v416(descendant)
+		pcall(function()
+			if v412(descendant) then
+				return
+			end
+
+			if t17[descendant.Name] then
+				descendant:Destroy()
+
+				return
+			end
+
+			if descendant:IsA("BillboardGui") and t18[descendant.Name] then
+				if descendant.Enabled then
+					t15.effects[descendant] = true
+				end
+
+				descendant.Enabled = false
+
+				return
+			end
+
+			if descendant:IsA("ParticleEmitter") or descendant:IsA("Trail") or descendant:IsA("Beam") or descendant:IsA("Sparkles") or descendant:IsA("Fire") or descendant:IsA("Smoke") or descendant:IsA("PostEffect") then
+				if descendant.Enabled then
+					t15.effects[descendant] = true
+				end
+
+				descendant.Enabled = false
+			end
+		end)
+	end
+	local function v417()
+		if u393 then
+			return
+		end
+
+		u393 = true
+		table.insert(t16, game.DescendantAdded:Connect(v416))
+		table.insert(t16, workspace.ChildAdded:Connect(function(child)
+			if child.Name == "ClientRenderedAssets" then
+				v396()
+				table.insert(t16, child.ChildAdded:Connect(function(child2)
+					pcall(function()
+						child2.Parent = nil
+					end)
+				end))
+			elseif child.Name == "PlacedEggRenders" then
+				v401()
+				table.insert(t16, child.ChildAdded:Connect(function(child2)
+					pcall(function()
+						if not child2:FindFirstChildOfClass("ProximityPrompt") and not v400(child2) then
+							child2.Parent = nil
+						end
+					end)
+				end))
+			elseif child.Name == "__DEBRIS" or child.Name == "Transient" then
+				table.insert(t16, child.ChildAdded:Connect(function(child2)
+					if child2.Name == "PlayerTrap" then
+						pcall(function()
+							child2:Destroy()
+						end)
+
+						return
+					elseif child2.Name:lower():find("trap") then
+						pcall(function()
+							child2:Destroy()
+						end)
+					end
+				end))
+			end
+		end))
+
+		local ClientRenderedAssets = workspace:FindFirstChild("ClientRenderedAssets")
+
+		if ClientRenderedAssets then
+			table.insert(t16, ClientRenderedAssets.ChildAdded:Connect(function(child)
+				pcall(function()
+					child.Parent = nil
+				end)
+			end))
+		end
+
+		for _, child in ipairs(workspace:GetChildren()) do
+			if child.Name == "PlacedEggRenders" then
+				table.insert(t16, child.ChildAdded:Connect(function(child2)
+					pcall(function()
+						if not child2:FindFirstChildOfClass("ProximityPrompt") then
+							if not v400(child2) then
+								child2.Parent = nil
+							end
+						end
+					end)
+				end))
+			end
+		end
+	end
 
 	local u421 = false
 
+	v390 = function()
+		if u421 then
+			return
+		end
+
+		u421 = true
+
+		local Lighting = game:GetService("Lighting")
+
+		if not t15.snapshot then
+			local t19 = {}
+
+			pcall(function()
+				t19.quality = settings().Rendering.QualityLevel
+				t19.throttle = settings().Physics.PhysicsEnvironmentalThrottle
+				t19.technology = Lighting.Technology
+				t19.shadows = Lighting.GlobalShadows
+				t19.fogEnd = Lighting.FogEnd
+				t19.brightness = Lighting.Brightness
+				t19.ambient = Lighting.Ambient
+				t19.outdoorAmbient = Lighting.OutdoorAmbient
+			end)
+
+			local Terrain = workspace:FindFirstChildOfClass("Terrain")
+
+			if Terrain then
+				pcall(function()
+					t19.terrain = {
+						WaterWaveSize = Terrain.WaterWaveSize,
+						WaterWaveSpeed = Terrain.WaterWaveSpeed,
+						WaterReflectance = Terrain.WaterReflectance,
+						WaterTransparency = Terrain.WaterTransparency,
+						Decoration = Terrain.Decoration
+					}
+				end)
+				pcall(function()
+					local Clouds = Terrain:FindFirstChildOfClass("Clouds")
+
+					if Clouds then
+						t19.cloudsEnabled = Clouds.Enabled
+					end
+				end)
+			end
+
+			pcall(function()
+				local Preferences = ReplicatedStorage.Shared:FindFirstChild("Preferences")
+
+				if Preferences then
+					local module = require(Preferences)
+
+					t19.prefs = {
+						HideOtherPets = module.IsOn("HideOtherPets"),
+						DisableVideos = module.IsOn("DisableVideos")
+					}
+				end
+			end)
+
+			if t19.quality == Enum.QualityLevel.Level01 then
+				t19.quality = Enum.QualityLevel.Automatic
+			end
+
+			t15.snapshot = genv.__SenaV4DecomSnapshot or t19
+			genv.__SenaV4DecomSnapshot = t15.snapshot
+		end
+
+		pcall(function()
+			settings().Rendering.QualityLevel = Enum.QualityLevel.Level01
+			settings().Physics.PhysicsEnvironmentalThrottle = Enum.EnviromentalPhysicsThrottle.Always
+			Lighting.Technology = Enum.Technology.Compatibility
+			Lighting.GlobalShadows = false
+			Lighting.FogEnd = 9e9
+			Lighting.Brightness = 2
+			Lighting.Ambient = Color3.new(1, 1, 1)
+			Lighting.OutdoorAmbient = Color3.new(1, 1, 1)
+		end)
+
+		local now = os.clock()
+
+		for _, v in ipairs({
+			workspace,
+			Lighting
+		}) do
+			for _, descendant in ipairs(v:GetDescendants()) do
+				if not v412(descendant) then
+					if descendant:IsA("BasePart") then
+						pcall(function()
+							if not t15.parts[descendant] then
+								t15.parts[descendant] = {
+									descendant.Material,
+									descendant.CastShadow,
+									descendant:IsA("MeshPart") and descendant.RenderFidelity or nil
+								}
+							end
+
+							descendant.Material = Enum.Material.SmoothPlastic
+							descendant.CastShadow = false
+
+							if descendant:IsA("MeshPart") then
+								descendant.RenderFidelity = Enum.RenderFidelity.Performance
+							end
+						end)
+					else
+						if descendant:IsA("Decal") then
+							pcall(function()
+								if descendant.Texture ~= "" and not t15.decals[descendant] then
+									t15.decals[descendant] = descendant.Texture
+								end
+
+								descendant.Texture = ""
+							end)
+
+							if os.clock() - now > 0.004 then
+								task.wait()
+								now = os.clock()
+							end
+
+							continue
+						end
+
+						if descendant:IsA("Texture") then
+							pcall(function()
+								if descendant.Texture ~= "" and not t15.decals[descendant] then
+									t15.decals[descendant] = descendant.Texture
+								end
+
+								descendant.Texture = ""
+							end)
+						else
+							v416(descendant)
+						end
+					end
+
+					if os.clock() - now > 0.004 then
+						task.wait()
+						now = os.clock()
+					end
+				end
+			end
+		end
+
+		local Terrain = workspace:FindFirstChildOfClass("Terrain")
+
+		if Terrain then
+			pcall(function()
+				Terrain.WaterWaveSize = 0
+				Terrain.WaterWaveSpeed = 0
+				Terrain.WaterReflectance = 0
+				Terrain.WaterTransparency = 1
+				Terrain.Decoration = false
+
+				local Clouds = Terrain:FindFirstChildOfClass("Clouds")
+
+				if Clouds then
+					Clouds.Enabled = false
+				end
+			end)
+		end
+
+		pcall(function()
+			local Shared = ReplicatedStorage.Shared
+			local Preferences = Shared:FindFirstChild("Preferences")
+
+			if Preferences then
+				local module = require(Preferences)
+
+				module.Set("HideOtherPets", true)
+				module.Set("DisableVideos", true)
+			else
+				local SettingsCmds = require(Shared.SettingsCmds)
+
+				SettingsCmds.Write("HideOtherPets", true)
+				SettingsCmds.Write("DisableVideos", true)
+			end
+		end)
+		v396()
+		v401()
+		v406()
+		v417()
+		u421 = false
+	end
 	t15.revert = function()
 		for _, v in ipairs(t16) do
 			pcall(function()
@@ -2258,13 +2795,635 @@ do
 		t15.effects = {}
 		t15.snapshot = nil
 	end
+	genv.__SenaV4DecomBoostUndo = t15
 
 	local u456 = false
 
+	local function v457(p84)
+		if not p84 or not p84:IsA("Model") then
+			return
+		end
+
+		local match = p84.Name:match("^(%d+)_")
+		local v459 = match and tonumber(match)
+
+		if not v459 or v459 == LocalPlayer.UserId then
+			return
+		end
+
+		for _, descendant in ipairs(p84:GetDescendants()) do
+			if descendant:IsA("BasePart") then
+				descendant.Transparency = 1
+				descendant.CanCollide = false
+			elseif descendant:IsA("Decal") or descendant:IsA("Texture") then
+				descendant.Transparency = 1
+			elseif descendant:IsA("ParticleEmitter") or descendant:IsA("Trail") or descendant:IsA("Beam") then
+				descendant.Enabled = false
+			elseif descendant:IsA("BillboardGui") or descendant:IsA("SurfaceGui") then
+				descendant.Enabled = false
+			end
+		end
+	end
+	local function v462()
+		if senaV4Config._fpsEggsReady then
+			return true
+		end
+
+		local u463 = false
+		local ok, result = pcall(function()
+			local v466 = require(game:GetService("ReplicatedStorage").Shared.Eggs.PlacedEggRenderer).GetRenderFolder()
+
+			if not v466 then
+				return
+			end
+
+			local children = v466:GetChildren()
+
+			for _, child in ipairs(children) do
+				v457(child)
+			end
+
+			v466.ChildAdded:Connect(function(child)
+				task.defer(v457, child)
+			end)
+			u463 = true
+		end)
+
+		if not ok then
+			warn("[FPSBoost] Gagal hide egg pemain lain:", result)
+
+			return false
+		end
+
+		return u463
+	end
+	local function v470(p85)
+		if not p85 then
+			return
+		end
+
+		pcall(function()
+			p85.Parent = nil
+		end)
+	end
+	local function v471()
+		if senaV4Config._fpsPetsReady then
+			return true
+		end
+
+		local IsOn
+		local ok, result = pcall(function()
+			local Shared = game:GetService("ReplicatedStorage").Shared
+			local Preferences = Shared:FindFirstChild("Preferences")
+
+			if Preferences then
+				local module = require(Preferences)
+
+				module.Set("HideOtherPets", true)
+				IsOn = module.IsOn
+			else
+				local SettingsCmds = require(Shared.SettingsCmds)
+
+				SettingsCmds.Write("HideOtherPets", true)
+				IsOn = SettingsCmds.Allows
+			end
+		end)
+		local v479 = false
+
+		if ok and IsOn then
+			local ok2, result2 = pcall(IsOn, "HideOtherPets")
+
+			v479 = ok2 and result2 == true
+		end
+
+		if ok then
+			if v479 then
+				local u482 = false
+				local ok2, result2 = pcall(function()
+					local ClientRenderedAssets = workspace:FindFirstChild("ClientRenderedAssets") or workspace:WaitForChild("ClientRenderedAssets", 10)
+
+					if not ClientRenderedAssets then
+						return
+					end
+
+					local children = ClientRenderedAssets:GetChildren()
+
+					for _, child in ipairs(children) do
+						v470(child)
+					end
+
+					ClientRenderedAssets.ChildAdded:Connect(function(child)
+						task.defer(v470, child)
+					end)
+					u482 = true
+				end)
+
+				if not ok2 then
+					warn("[FPSBoost] Gagal hide pet (manual):", result2)
+
+					return false
+				end
+
+				return u482
+			end
+		end
+
+		warn("[FPSBoost] Gagal set HideOtherPets bawaan game:", result or "setting belum aktif")
+
+		return false
+	end
+	local function v489()
+		if type(genv.__SenaV4SetCapFps) == "function" then
+			pcall(genv.__SenaV4SetCapFps, 240)
+		end
+
+		pcall(function()
+			settings().Rendering.QualityLevel = Enum.QualityLevel.Level01
+		end)
+
+		local function v490()
+			UserSettings():GetService("UserGameSettings").SavedQualityLevel = Enum.SavedQualitySetting.QualityLevel1
+		end
+
+		pcall(v490)
+		pcall(function()
+			require(game:GetService("ReplicatedStorage").Client.LightingsController):SetModifier("FPSBoost", function(p86)
+				local v491 = table.clone(p86)
+
+				v491.Bloom = nil
+				v491.ColorCorrection = nil
+				v491.SunRays = nil
+				v491.DepthOfField = nil
+				v491.Blur = nil
+				v491.Clouds = nil
+				v491.Atmosphere = nil
+				v491.ShadowSoftness = 1
+
+				return v491
+			end, 100, 0)
+		end)
+		pcall(function()
+			local Lighting = game:GetService("Lighting")
+
+			Lighting.GlobalShadows = false
+			Lighting.Technology = Enum.Technology.Compatibility
+			Lighting.FogEnd = 9e9
+			Lighting.Brightness = 2
+		end)
+		pcall(function()
+			local Terrain = workspace:FindFirstChildOfClass("Terrain")
+
+			if Terrain then
+				Terrain.WaterWaveSize = 0
+				Terrain.WaterWaveSpeed = 0
+				Terrain.WaterReflectance = 0
+				Terrain.WaterTransparency = 1
+				Terrain.Decoration = false
+			end
+		end)
+		pcall(function()
+			local __DEBRIS = workspace:FindFirstChild("__DEBRIS")
+
+			if __DEBRIS then
+				for _, child in ipairs(__DEBRIS:GetChildren()) do
+					if child.Name == "PlayerTrap" then
+						pcall(function()
+							child:Destroy()
+						end)
+					end
+				end
+			end
+		end)
+	end
 
 	local color3 = Color3.fromRGB(120, 120, 120)
 
+	local function v498(p87)
+		if not p87 or not p87:IsA("BasePart") then
+			return
+		end
 
+		p87.Material = Enum.Material.SmoothPlastic
+		p87.Color = color3
+		p87.CastShadow = false
+	end
+	local function v499(p88)
+		if p88:IsA("ParticleEmitter") then
+			p88.Enabled = false
+			p88.Rate = 0
+			pcall(function()
+				p88:Clear()
+			end)
+		elseif p88:IsA("Trail") or p88:IsA("Beam") or p88:IsA("Smoke") or p88:IsA("Fire") or p88:IsA("Sparkles") or p88:IsA("PostEffect") or p88:IsA("Light") or p88:IsA("Highlight") or p88:IsA("Clouds") then
+			p88.Enabled = false
+		elseif p88:IsA("Atmosphere") then
+			p88.Density = 0
+			p88.Haze = 0
+			p88.Glare = 0
+		elseif p88:IsA("Explosion") then
+			pcall(function()
+				p88.Visible = false
+			end)
+		end
+	end
+	local function v500()
+		if senaV4Config._fpsWorldReady then
+			return true
+		end
+
+		local u501 = false
+		local t20 = {}
+		local ok, result = pcall(function()
+			local function v505(p89)
+				if v412(p89) then
+					return
+				end
+
+				v498(p89)
+				v499(p89)
+			end
+
+			local t21 = {
+				workspace,
+				game:GetService("Lighting")
+			}
+
+			for _, v in ipairs(t21) do
+				table.insert(t20, v.DescendantAdded:Connect(function(descendant)
+					task.defer(v505, descendant)
+				end))
+			end
+
+			local t22 = {}
+
+			for _, v in ipairs(t21) do
+				for _, child in ipairs(v:GetChildren()) do
+					table.insert(t22, child)
+				end
+			end
+
+			local n11 = 0
+
+			while #t22 > 0 do
+				local v515 = table.remove(t22)
+
+				v505(v515)
+
+				for _, child in ipairs(v515:GetChildren()) do
+					table.insert(t22, child)
+				end
+
+				n11 += 1
+
+				if n11 >= 250 and #t22 > 0 then
+					n11 = 0
+					RunService.Heartbeat:Wait()
+				end
+			end
+
+			u501 = true
+		end)
+
+		if ok then
+			return u501
+		end
+
+		for _, v in ipairs(t20) do
+			v:Disconnect()
+		end
+
+		warn("[FPSBoost] Gagal flatten material workspace:", result)
+
+		return false
+	end
+	local function v520()
+		if senaV4Config._fpsAreasReady then
+			return true
+		end
+
+		local v521 = v14()
+		local Areas = v521 and v521:FindFirstChild("Areas")
+		local GuardAreas = Areas and Areas:FindFirstChild("GuardAreas")
+		local Build = v521 and v521:FindFirstChild("Build")
+
+		if not GuardAreas or not Build then
+			return false
+		end
+
+		for _, child in ipairs(GuardAreas:GetChildren()) do
+			local RequiredSpeedSign = child:FindFirstChild("RequiredSpeedSign")
+
+			if RequiredSpeedSign then
+				pcall(function()
+					RequiredSpeedSign:Destroy()
+				end)
+			end
+		end
+
+		local MainMap = Build:FindFirstChild("MainMap")
+		local Bases = MainMap and MainMap:FindFirstChild("Bases")
+
+		local function v530(p90)
+			if Bases and p90:IsDescendantOf(Bases) then
+				return p90.Size.Y <= 5 and not string.find(string.upper(p90.Name), "WALL", 1, true)
+			end
+
+			local Parent = p90
+
+			while true do
+				if not Parent or Parent == Build then
+					return false
+				end
+
+				if not string.find(string.upper(Parent.Name), "BOTTOM", 1, true) then
+					Parent = Parent.Parent
+
+					continue
+				end
+
+				break
+			end
+
+			return true
+		end
+
+		local t23 = {
+			"ENCHANTED",
+			"FUSEBIOME",
+			"WISP",
+			"BUTTERFLY",
+			"MARKERS",
+			"PORTAL",
+			"TRIGGER"
+		}
+
+		local function v533(p91)
+			if p91:FindFirstChildOfClass("TouchTransmitter") or p91:FindFirstChildWhichIsA("ProximityPrompt", true) then
+				return true
+			end
+
+			local Parent = p91
+
+			while true do
+				if not Parent then
+					return false
+				end
+
+				if Parent == Build then
+					return false
+				end
+
+				local v535 = string.upper(Parent.Name)
+
+				for _, v in ipairs(t23) do
+					if string.find(v535, v, 1, true) then
+						return true
+					end
+				end
+
+				Parent = Parent.Parent
+			end
+		end
+		local function v538(p92)
+			if not p92:IsA("BasePart") then
+				return
+			end
+
+			if v533(p92) then
+				return
+			end
+
+			if v530(p92) then
+				v498(p92)
+			else
+				pcall(function()
+					p92:Destroy()
+				end)
+			end
+		end
+
+		local connection = Build.DescendantAdded:Connect(function(descendant)
+			task.defer(v538, descendant)
+		end)
+		local n12 = 0
+		local fpsAreaDeleted = 0
+
+		for _, descendant in ipairs(Build:GetDescendants()) do
+			local v544 = descendant.Parent ~= nil
+
+			v538(descendant)
+
+			if v544 and descendant.Parent == nil then
+				fpsAreaDeleted += 1
+			end
+
+			n12 += 1
+
+			if n12 >= 250 then
+				n12 = 0
+				RunService.Heartbeat:Wait()
+			end
+		end
+
+		senaV4Config._fpsAreaListener = connection
+		senaV4Config._fpsAreaDeleted = fpsAreaDeleted
+		senaV4Config._fpsAreasReady = true
+
+		return true
+	end
+	local function v545()
+		if senaV4Config._fpsPlotsReady then
+			return true
+		end
+
+		local u546 = false
+		local ok, result = pcall(function()
+			local PlotState2 = require(game:GetService("ReplicatedStorage").Client.PlotState)
+
+			if PlotState2.GetMySlot() == nil then
+				warn("[FPSBoost] Slot plot kita belum ke-resolve, skip delete plot dulu (biar aman).")
+
+				return
+			end
+
+			local function v550(p93)
+				local v551 = PlotState2.GetMySlot()
+
+				return v551 ~= nil and p93.Name == tostring(v551)
+			end
+
+			local Plots = PlotState2.GetPlotsFolder() or workspace:WaitForChild("Plots", 10)
+
+			if not Plots then
+				warn("[FPSBoost] workspace.Plots gak ketemu sama sekali.")
+
+				return
+			end
+
+			local children = Plots:GetChildren()
+			local n13 = 0
+
+			for _, child in ipairs(children) do
+				if not v550(child) and pcall(function()
+					child:Destroy()
+				end) then
+					n13 += 1
+				end
+			end
+
+			Plots.ChildAdded:Connect(function(child)
+				task.defer(function()
+					if child.Parent then
+						if not v550(child) then
+							pcall(function()
+								child:Destroy()
+							end)
+						end
+					end
+				end)
+			end)
+			u546 = true
+		end)
+
+		if ok then
+			return u546
+		end
+
+		warn("[FPSBoost] Gagal delete plot pemain lain:", result)
+
+		return false
+	end
+	local function v557()
+		if senaV4Config._fpsTreadmillsReady then
+			return true
+		end
+
+		local u558 = false
+		local ok, result = pcall(function()
+			local ReplicatedStorage2 = game:GetService("ReplicatedStorage")
+			local PlotState2 = require(ReplicatedStorage2.Client.PlotState)
+			local v563
+			local Modules = ReplicatedStorage2.Client:FindFirstChild("Modules") or ReplicatedStorage2.Client:WaitForChild("Modules", 10)
+			local RuntimeInstanceRegistry = Modules and (Modules:FindFirstChild("RuntimeInstanceRegistry") or Modules:WaitForChild("RuntimeInstanceRegistry", 10))
+
+			if RuntimeInstanceRegistry then
+				local ok, result = pcall(require, RuntimeInstanceRegistry)
+
+				if ok then
+					v563 = result
+				end
+			end
+
+			local __ClientTreadmillRenders = workspace:FindFirstChild("__ClientTreadmillRenders") or workspace:WaitForChild("__ClientTreadmillRenders", 10)
+
+			if not __ClientTreadmillRenders then
+				return
+			end
+
+			local function v569()
+				local v570 = PlotState2.GetMySlot()
+
+				if v570 == nil then
+					return nil
+				end
+
+				local v571 = __ClientTreadmillRenders:FindFirstChild("TreadmillRender_" .. tostring(v570))
+
+				if v571 then
+					return v571
+				end
+
+				local Peek = v563 and (v563.Peek or v563.Get)
+
+				if not Peek then
+					return nil
+				end
+
+				local ok, result = pcall(Peek, "TreadmillPlotRender", tostring(v570))
+
+				if ok then
+					return result
+				end
+
+				return nil
+			end
+			local function v575(p94)
+				local v576 = v569()
+
+				if v576 and p94 == v576 then
+					return true
+				end
+
+				local ok, result = pcall(function()
+					return p94:GetPivot().Position
+				end)
+
+				if not ok then
+					return true
+				end
+
+				local ok2, result2 = pcall(PlotState2.IsWorldPositionWithinLocalPlotBounds, result)
+				local v581 = ok2 and result2
+
+				return v581
+			end
+
+			local children = __ClientTreadmillRenders:GetChildren()
+			local n14 = 0
+
+			for _, child in ipairs(children) do
+				if child:IsA("Model") and not v575(child) and pcall(function()
+					child:Destroy()
+				end) then
+					n14 += 1
+				end
+			end
+
+			__ClientTreadmillRenders.ChildAdded:Connect(function(child)
+				task.defer(function()
+					if child.Parent and child:IsA("Model") and not v575(child) then
+						pcall(function()
+							child:Destroy()
+						end)
+					end
+				end)
+			end)
+			u558 = true
+		end)
+
+		if ok then
+			return u558
+		end
+
+		warn("[FPSBoost] Gagal delete treadmill pemain lain:", result)
+
+		return false
+	end
+
+	v391 = function()
+		if u456 or senaV4Config._fpsBoostApplying then
+			return
+		end
+
+		senaV4Config._fpsBoostApplying = true
+
+		local ok, result = pcall(function()
+			v489()
+			senaV4Config._fpsPlotsReady = v545() == true
+			senaV4Config._fpsTreadmillsReady = v557() == true
+			senaV4Config._fpsAreasReady = v520() == true
+			senaV4Config._fpsWorldReady = v500() == true
+			senaV4Config._fpsPetsReady = v471() == true
+			senaV4Config._fpsEggsReady = v462() == true
+			u456 = senaV4Config._fpsEggsReady and senaV4Config._fpsPetsReady and senaV4Config._fpsWorldReady and senaV4Config._fpsPlotsReady and senaV4Config._fpsTreadmillsReady and senaV4Config._fpsAreasReady
+		end)
+
+		senaV4Config._fpsBoostApplying = nil
+
+		if not ok then
+			warn("[FPSBoost] Gagal menerapkan FPS Boost:", result)
+		end
+	end
 end
 
 local function v588(p95, p96, p97)
@@ -2999,12 +4158,90 @@ do
 
 		local v748
 
+		local function v749(p142, p143)
+			if type(p142) ~= "function" or type(debug) ~= "table" or type(debug.getconstants) ~= "function" then
+				return false
+			end
+
+			local ok, result = pcall(debug.getconstants, p142)
+
+			if not ok or type(result) ~= "table" then
+				return false
+			end
+
+			local t48 = {}
+
+			for _, v in ipairs(result) do
+				if type(v) == "string" then
+					t48[v] = true
+				end
+			end
+
+			for _, v in ipairs(p143) do
+				if not t48[v] then
+					return false
+				end
+			end
+
+			return true
+		end
+		local function v757(p144)
+			if type(p144) ~= "function" or type(debug) ~= "table" or type(debug.info) ~= "function" then
+				return ""
+			end
+
+			local ok, result = pcall(debug.info, p144, "s")
+
+			return ok and tostring(result) or ""
+		end
 		local function v760(p145)
 			local HumanoidRootPart = p145 and p145:FindFirstChild("HumanoidRootPart")
 
 			if HumanoidRootPart then
 				HumanoidRootPart:SetAttribute("KillPartIgnore", true)
 			end
+		end
+		local function v762(p146)
+			local Humanoid = p146 and p146:FindFirstChildOfClass("Humanoid")
+
+			if not Humanoid or not Humanoid.Parent then
+				return false
+			end
+
+			pcall(function()
+				Humanoid.BreakJointsOnDeath = false
+			end)
+
+			local clone = Humanoid:Clone()
+
+			Humanoid:Destroy()
+			clone.Parent = p146
+
+			local CurrentCamera = workspace.CurrentCamera
+
+			if CurrentCamera then
+				CurrentCamera.CameraSubject = clone
+			end
+
+			local Animate = p146:FindFirstChild("Animate")
+
+			if Animate then
+				local clone2 = Animate:Clone()
+
+				Animate:Destroy()
+				clone2.Parent = p146
+			end
+
+			pcall(function()
+				clone:SetStateEnabled(Enum.HumanoidStateType.Dead, false)
+				clone:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
+				clone:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
+				clone:SetStateEnabled(Enum.HumanoidStateType.PlatformStanding, false)
+				clone:SetStateEnabled(Enum.HumanoidStateType.Physics, false)
+				clone:ChangeState(Enum.HumanoidStateType.Running)
+			end)
+
+			return true
 		end
 		local function v768(p147)
 			if p147._healthPinner then
@@ -3075,6 +4312,21 @@ do
 			p148._healthPinner = RunService2.Heartbeat:Connect(v775)
 
 			return true
+		end
+		local function v777(p150)
+			local Humanoid = p150 and p150:FindFirstChildOfClass("Humanoid")
+
+			if not Humanoid then
+				return
+			end
+
+			pcall(function()
+				Humanoid.BreakJointsOnDeath = false
+				Humanoid.RequiresNeck = false
+				Humanoid:SetStateEnabled(Enum.HumanoidStateType.Dead, false)
+				Humanoid:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
+				Humanoid:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
+			end)
 		end
 		local function v779(p151)
 			local Humanoid = p151 and p151:FindFirstChildOfClass("Humanoid")
@@ -8915,6 +10167,17 @@ do
 
 					return true
 				end
+				local function v1528(p430, p431)
+					local v1529, v1530 = v1521()
+
+					if v1529 and v1530 and typeof(p430) == "CFrame" then
+						if p431 then
+							p428:_setStatus(p431)
+						end
+
+						p428:_teleportRoot(v1529, v1530, p430)
+					end
+				end
 				local function v1531()
 					local v1532 = v1521()
 
@@ -11474,6 +12737,16 @@ do
 		q = 1e15
 	}
 
+	local function v1825(p515)
+		local match, v1827 = tostring(p515 or ""):lower():gsub("%s+", ""):gsub("%$", ""):gsub("/s$", ""):match("^([%d%.]+)([kmbtq]?)$")
+		local v1828 = tonumber(match)
+
+		if v1828 then
+			return math.max(0, math.floor(v1828 * (t63[v1827] or 1) + 0.5))
+		end
+
+		return nil
+	end
 	local function v1829()
 		local Players2 = game:GetService("Players")
 		local RunService2 = game:GetService("RunService")
@@ -15750,6 +17023,7 @@ do
 
 	local v2428 = v2375().new()
 
+	genv.__SenaV4MovementExtras = v2428
 
 	if senaV4Config.FlyForCapture then
 		v2428:setFlyForCapture(true)
@@ -16133,6 +17407,7 @@ do
 
 	local v2489 = v2429().new()
 
+	genv.__SenaV4AntiHitGuard = v2489
 
 	if senaV4Config.AntiHitGuard then
 		v2489:setEnabled(true)
@@ -16487,6 +17762,25 @@ loadstring(game:HttpGet("https://senahub.xyz/raw/saev2"))()
 		end)
 	end
 end
+local function v2530()
+	pcall(function()
+		if delfile then
+			pcall(function()
+				delfile("autoexec/Sena_StealAnEgg.lua")
+			end)
+			pcall(function()
+				delfile("autoexecute/Sena_StealAnEgg.lua")
+			end)
+		elseif writefile then
+			pcall(function()
+				writefile("autoexec/Sena_StealAnEgg.lua", "")
+			end)
+			pcall(function()
+				writefile("autoexecute/Sena_StealAnEgg.lua", "")
+			end)
+		end
+	end)
+end
 
 local u2531 = false
 
@@ -16563,13 +17857,530 @@ task.spawn(function()
 	end
 end)
 
+local function v2540()
+	local Remotes = require(ReplicatedStorage.Shared.Remotes)
 
+	local function v2542(p701, p702, p703)
+		local v2543 = (require(ReplicatedStorage.Shared.Save).Peek or require(ReplicatedStorage.Shared.Save).Get)()
 
-do
+		if not v2543 or type(v2543.Inventory) ~= "table" then
+			return nil
+		end
 
+		local AssetItems = require(ReplicatedStorage.Shared.Util.AssetItems)
+		local Directory = require(ReplicatedStorage.Data.Assets).Directory
+		local t104 = {}
+		local ipairs_ = ipairs
+		local EquippedAssets = v2543.EquippedAssets or {}
+
+		for _, EquippedAsset in ipairs_(EquippedAssets) do
+			t104[EquippedAsset] = true
+		end
+
+		local t105 = {}
+
+		for k, v in pairs(v2543.Inventory) do
+			if not t104[k] then
+				local u2554
+
+				if AssetItems and type(AssetItems.Decode) == "function" then
+					pcall(function()
+						u2554 = AssetItems.Decode(v)
+					end)
+				end
+
+				u2554 = u2554 or v
+
+				if type(u2554) == "table" and not u2554.InFuse and not u2554.IsFavorite and u2554.Category then
+					local v2555 = Directory[u2554.Category]
+					local DisplayName = v2555 and v2555.Rarity and (v2555.Rarity.DisplayName or v2555.Rarity._id)
+					local v2557 = true
+
+					if p703 and #p703 > 0 and not table.find(p703, "All") then
+						v2557 = DisplayName and table.find(p703, DisplayName) ~= nil
+					end
+
+					local v2558 = true
+
+					if p701 and p702 and #p702 > 0 and not table.find(p702, "All") then
+						v2558 = table.find(p702, u2554.Category) ~= nil or v2555 and table.find(p702, v2555.DisplayName) ~= nil
+					end
+
+					if v2557 and v2558 then
+						t105[u2554.Category] = t105[u2554.Category] or {}
+						table.insert(t105[u2554.Category], {
+							uid = k,
+							d = u2554
+						})
+					end
+				end
+			end
+		end
+
+		for _, v in pairs(t105) do
+			if not (#v >= 3) then
+				continue
+			end
+
+			return {
+				v[1].uid,
+				v[2].uid,
+				v[3].uid
+			}
+		end
+
+		return nil
+	end
+
+	local t106 = {
+		equipBest = function()
+			pcall(function()
+				Remotes.Haul.WearBest:InvokeServer()
+			end)
+		end,
+		claimOffline = function()
+			local ok, result = pcall(function()
+				return Remotes.AwayEarnings.FetchSummary:InvokeServer()
+			end)
+
+			if ok and type(result) == "table" then
+				if (result.ClaimableAmount or 0) > 0 then
+					pcall(function()
+						Remotes.AwayEarnings.AskCollect:InvokeServer({
+							Kind = "Claim"
+						})
+					end)
+				end
+			end
+		end,
+		favoriteSelected = function()
+			local v2564 = (require(ReplicatedStorage.Shared.Save).Peek or require(ReplicatedStorage.Shared.Save).Get)()
+
+			if not v2564 or type(v2564.Inventory) ~= "table" then
+				return 0
+			end
+
+			local AssetItems = require(ReplicatedStorage.Shared.Util.AssetItems)
+			local Directory = require(ReplicatedStorage.Data.Assets).Directory
+			local n47 = 0
+
+			for k, v in pairs(v2564.Inventory) do
+				local u2570
+
+				if AssetItems and type(AssetItems.Decode) == "function" then
+					pcall(function()
+						u2570 = AssetItems.Decode(v)
+					end)
+				end
+
+				u2570 = u2570 or v
+
+				if type(u2570) == "table" then
+					if not u2570.IsFavorite and u2570.Category then
+						local v2571 = Directory[u2570.Category]
+						local DisplayName = v2571 and v2571.Rarity and (v2571.Rarity.DisplayName or v2571.Rarity._id)
+						local v2573 = false
+
+						if senaV4Config.FavMode == "Species" then
+							local FavSpecies = senaV4Config.FavSpecies or {}
+
+							if table.find(FavSpecies, "All") or table.find(FavSpecies, u2570.Category) or v2571 and table.find(FavSpecies, v2571.DisplayName) then
+								v2573 = true
+							end
+						else
+							local FavRarities = senaV4Config.FavRarities or {}
+
+							if table.find(FavRarities, "All") or DisplayName and table.find(FavRarities, DisplayName) then
+								v2573 = true
+							end
+						end
+
+						if v2573 then
+							pcall(function()
+								Remotes.PetSatchel.WriteFavourite:FireServer(k, true)
+							end)
+							n47 += 1
+
+							if n47 % 10 == 0 then
+								task.wait(0.05)
+							end
+						end
+					end
+				end
+			end
+
+			return n47
+		end,
+		unfavoriteAll = function()
+			local v2576 = (require(ReplicatedStorage.Shared.Save).Peek or require(ReplicatedStorage.Shared.Save).Get)()
+
+			if not v2576 or type(v2576.Inventory) ~= "table" then
+				return 0
+			end
+
+			local n48 = 0
+
+			for k, v in pairs(v2576.Inventory) do
+				local v2580 = v
+
+				if type(v2580) == "table" and v2580.IsFavorite then
+					pcall(function()
+						Remotes.PetSatchel.WriteFavourite:FireServer(k, false)
+					end)
+					n48 += 1
+
+					if n48 % 10 == 0 then
+						task.wait(0.05)
+					end
+				end
+			end
+
+			return n48
+		end,
+		fuseOnePair = function()
+			local v2581 = (require(ReplicatedStorage.Shared.Save).Peek or require(ReplicatedStorage.Shared.Save).Get)()
+
+			if not v2581 then
+				return false
+			end
+
+			if v2581.FusionLocked then
+				return false, "Fusion locked"
+			end
+
+			local v2582 = v2542(senaV4Config.FuseSelectedOnly, senaV4Config.FuseSpecies, senaV4Config.FuseRarities)
+
+			if not v2582 then
+				return false, "No eligible group of 3"
+			end
+
+			pcall(function()
+				Remotes.Fusery.ConfirmBriefing:InvokeServer()
+			end)
+
+			for _, v in ipairs(v2582) do
+				local ok, result = pcall(function()
+					return Remotes.Fusery.LoadPet:InvokeServer(v)
+				end)
+
+				if ok and result then
+					task.wait(0.02)
+
+					continue
+				end
+
+				return false, "Failed to load pet"
+			end
+
+			local ok, result = pcall(function()
+				return Remotes.Fusery.BeginFuse:InvokeServer()
+			end)
+
+			if not ok or not result then
+				return false, "Failed to begin fuse"
+			end
+
+			task.wait(0.06)
+			pcall(function()
+				Remotes.Fusery.FinishReveal:InvokeServer()
+			end)
+
+			return true
+		end
+	}
+
+	task.spawn(function()
+		local n49 = 0
+
+		while v16() do
+			local now = os.clock()
+
+			if senaV4Config.AutoEquipBest and now - n49 > 6 then
+				n49 = now
+				pcall(t106.equipBest)
+			end
+
+			if senaV4Config.AutoClaimOffline then
+				pcall(t106.claimOffline)
+			end
+
+			if senaV4Config.AutoFavorite then
+				pcall(t106.favoriteSelected)
+			end
+
+			if senaV4Config.AutoFusePets then
+				pcall(t106.fuseOnePair)
+			end
+
+			task.wait(2.5)
+		end
+	end)
+
+	return t106
 end
 
+genv.__SenaV4PetBarn = v2540()
 
+do
+	local function v2591()
+		local Remotes = require(ReplicatedStorage.Shared.Remotes)
+		local t107 = {
+			upgradeBase = function()
+				local v2594 = (require(ReplicatedStorage.Shared.Save).Peek or require(ReplicatedStorage.Shared.Save).Get)()
+
+				if not v2594 then
+					return false
+				end
+
+				local v2595 = tonumber(v2594.BaseUpgradeLevel or 0) or 0
+				local Bases = require(ReplicatedStorage.Data.Bases)
+				local BASES = Bases and Bases.BASES and Bases.BASES[v2595 + 1]
+
+				if not BASES then
+					return false, "Max level"
+				end
+
+				local v2598 = tonumber(v2594.Money or 0) or 0
+
+				if v2598 < (BASES.Cost or 0) then
+					return false, "Not enough money"
+				end
+
+				local ok, result = pcall(function()
+					return Remotes.Homestead.AskBaseTierRaise:InvokeServer()
+				end)
+				local v2601 = ok and result == true
+
+				return v2601, result
+			end,
+			claimAlmanac = function()
+				local ok, result = pcall(function()
+					return Remotes.Codex.AskRedeemAll:InvokeServer()
+				end)
+
+				return ok, result
+			end
+		}
+
+		task.spawn(function()
+			while v16() do
+				if senaV4Config.AutoBaseUpgrade then
+					pcall(t107.upgradeBase)
+				end
+
+				if senaV4Config.AutoClaimAlmanac then
+					pcall(t107.claimAlmanac)
+				end
+
+				task.wait(3)
+			end
+		end)
+
+		return t107
+	end
+
+	genv.__SenaV4Upgrades = v2591()
+end
+
+local function v2604()
+	local t108 = {
+		noclipConn = nil
+	}
+
+	t108.setNoclip = function(p704)
+		senaV4Config.Noclip = p704 == true
+
+		if t108.noclipConn then
+			pcall(function()
+				t108.noclipConn:Disconnect()
+			end)
+			t108.noclipConn = nil
+		end
+
+		if senaV4Config.Noclip then
+			t108.noclipConn = RunService.Stepped:Connect(function()
+				if not senaV4Config.Noclip then
+					return
+				end
+
+				local Character = LocalPlayer.Character
+
+				if not Character then
+					return
+				end
+
+				for _, descendant in ipairs(Character:GetDescendants()) do
+					if descendant:IsA("BasePart") and descendant.CanCollide then
+						descendant:SetAttribute("SenaNoclip", true)
+						descendant.CanCollide = false
+					end
+				end
+			end)
+
+			return
+		end
+
+		local Character = LocalPlayer.Character
+
+		if Character then
+			for _, descendant in ipairs(Character:GetDescendants()) do
+				if descendant:IsA("BasePart") and descendant:GetAttribute("SenaNoclip") then
+					descendant.CanCollide = true
+					descendant:SetAttribute("SenaNoclip", nil)
+				end
+			end
+		end
+	end
+	t108.waypointList = function()
+		local t109 = { "Respawn Point" }
+		local v2613 = v14()
+		local Machines = v2613 and v2613:FindFirstChild("Machines")
+
+		if Machines and Machines:FindFirstChild("FuseMachine") then
+			table.insert(t109, "Fuse Machine")
+		end
+
+		local Areas = v2613 and v2613:FindFirstChild("Areas")
+		local GuardAreas = Areas and Areas:FindFirstChild("GuardAreas")
+
+		if GuardAreas then
+			for _, child in ipairs(GuardAreas:GetChildren()) do
+				table.insert(t109, child.Name)
+			end
+		end
+
+		return t109
+	end
+	t108.teleportWaypoint = function(p705)
+		local Character = LocalPlayer.Character
+		local HumanoidRootPart = Character and Character:FindFirstChild("HumanoidRootPart")
+
+		if not HumanoidRootPart then
+			return false
+		end
+
+		local Position
+		local v2622 = v14()
+
+		if p705 == "Respawn Point" then
+			pcall(function()
+				local PlotState2 = require(ReplicatedStorage.Client.PlotState)
+				local ResolvePlot = PlotState2.ResolvePlot and PlotState2.ResolvePlot()
+
+				if ResolvePlot and ResolvePlot.RespawnPointCFrame then
+					Position = ResolvePlot.RespawnPointCFrame.Position
+				elseif ResolvePlot and ResolvePlot.Model then
+					if ResolvePlot.Model:FindFirstChild("Spawn") then
+						Position = ResolvePlot.Model.Spawn.Position
+					end
+				end
+			end)
+		elseif p705 == "Fuse Machine" then
+			local Machines = v2622 and v2622:FindFirstChild("Machines")
+			local FuseMachine = Machines and Machines:FindFirstChild("FuseMachine")
+			local Machine = FuseMachine and (FuseMachine:FindFirstChild("Machine") or FuseMachine.PrimaryPart)
+
+			if Machine then
+				Position = Machine.Position
+			end
+		else
+			local Areas = v2622 and v2622:FindFirstChild("Areas")
+			local GuardAreas = Areas and Areas:FindFirstChild("GuardAreas")
+			local v2630 = GuardAreas and GuardAreas:FindFirstChild(p705)
+			local Guard = v2630 and v2630:FindFirstChild("Guard")
+
+			if Guard and Guard:IsA("BasePart") then
+				Position = Guard.Position
+			end
+		end
+
+		if not Position then
+			return false
+		end
+
+		HumanoidRootPart.CFrame = cFrameNew(Position + Vector3.new(0, 4, 0))
+		HumanoidRootPart.AssemblyLinearVelocity = Vector3.zero
+
+		return true
+	end
+	t108.setBottingMode = function(p706)
+		senaV4Config.BottingMode = p706 == true
+
+		local __SenaV4BottingOverlay = genv.__SenaV4BottingOverlay
+
+		if __SenaV4BottingOverlay and __SenaV4BottingOverlay.Parent then
+			pcall(function()
+				__SenaV4BottingOverlay:Destroy()
+			end)
+		end
+
+		genv.__SenaV4BottingOverlay = nil
+
+		if not senaV4Config.BottingMode then
+			pcall(function()
+				RunService:Set3dRenderingEnabled(true)
+			end)
+
+			return
+		end
+
+		pcall(function()
+			RunService:Set3dRenderingEnabled(false)
+		end)
+
+		local CoreGui
+
+		pcall(function()
+			CoreGui = game:GetService("CoreGui")
+		end)
+		CoreGui = CoreGui or LocalPlayer:FindFirstChildOfClass("PlayerGui")
+
+		if not CoreGui then
+			return
+		end
+
+		local ScreenGui = Instance.new("ScreenGui")
+
+		ScreenGui.Name = "SenaBottingOverlay"
+		ScreenGui.ResetOnSpawn = false
+		ScreenGui.IgnoreGuiInset = true
+		ScreenGui.DisplayOrder = -1
+		ScreenGui.Parent = CoreGui
+
+		local Frame = Instance.new("Frame")
+
+		Frame.Name = "Blackscreen"
+		Frame.Size = UDim2.new(1, 0, 1, 0)
+		Frame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+		Frame.BorderSizePixel = 0
+		Frame.Active = false
+		Frame.Parent = ScreenGui
+		genv.__SenaV4BottingOverlay = ScreenGui
+	end
+	task.spawn(function()
+		while v16() do
+			if senaV4Config.AntiCutscene then
+				pcall(function()
+					local PlayerGui = LocalPlayer:FindFirstChild("PlayerGui")
+
+					if PlayerGui then
+						for _, child in ipairs(PlayerGui:GetChildren()) do
+							if child:IsA("ScreenGui") and (string.find(string.lower(child.Name), "cutscene") or child.Name == "Intro") and child.Enabled then
+								child.Enabled = false
+							end
+						end
+					end
+				end)
+			end
+
+			task.wait(0.2)
+		end
+	end)
+
+	return t108
+end
+
+genv.__SenaV4Roaming = v2604()
 
 do
 	local function v2639()
@@ -18788,6 +20599,7 @@ do
 			end
 		end
 	end)
+	genv.__SenaV4AutoCapture = t129
 end
 
 do
@@ -18901,6 +20713,32 @@ do
 		local AssetModels = ReplicatedStorage2:FindFirstChild("AssetModels")
 
 		return AssetModels and AssetModels:FindFirstChild(p770)
+	end
+	local function v3105()
+		for _, v in ipairs(t130.held) do
+			pcall(function()
+				v:Destroy()
+			end)
+		end
+
+		t130.held = {}
+
+		for _, v in ipairs({
+			LocalPlayer2.Character,
+			LocalPlayer2:FindFirstChild("Backpack")
+		}) do
+			if v then
+				for _, child in ipairs(v:GetChildren()) do
+					if child:IsA("Tool") then
+						if child.Name:sub(1, 8) == "SENAVIS_" then
+							pcall(function()
+								child:Destroy()
+							end)
+						end
+					end
+				end
+			end
+		end
 	end
 
 	t130.hold = function(p771, p772, p773)
@@ -19088,6 +20926,7 @@ do
 			end
 		end
 	end
+	genv.__SenaV4VisualSAE = t130
 end
 
 do
@@ -19108,7 +20947,1059 @@ do
 end
 
 do
+	local function v3143()
+		local HttpService = game:GetService("HttpService")
+		local t132 = {
+			base = "http://56.10.112.179:8080/visual/",
+			manifest = nil,
+			status = "Idle",
+			spawned = {},
+			backs = {},
+			backRod = nil,
+			remote = {}
+		}
+		local Unit = Vector3.new(0.3, 0.75, 0.6).Unit
+		local t133 = {
+			RightShoulder = Angles(0.69813170079773179, 0, 0.17453292519943295),
+			RightElbow = Angles(1.7453292519943295, 0, 0),
+			RightWrist = cFrameNew(),
+			LeftShoulder = cFrameNew(),
+			LeftElbow = cFrameNew(),
+			LeftWrist = cFrameNew()
+		}
+		local v3148 = cFrameNew(0.5, 1.3, 1, -0.7071, -0.7071, 0, -0.7071, 0.7071, 0, 0, 0, -1):Inverse()
 
+		local function v3149(p781)
+			local s8 = ""
+
+			for match in string.gmatch(p781, "[^/]+") do
+				s8 = s8 == "" and match or s8 .. "/" .. match
+
+				if not isfolder(s8) then
+					makefolder(s8)
+				end
+			end
+		end
+		local function v3152(p782)
+			local ok, result = pcall(function()
+				return game:HttpGet(p782, true)
+			end)
+
+			if not ok or type(result) ~= "string" or result == "" then
+				return nil
+			end
+
+			return result
+		end
+
+		t132.loadManifest = function()
+			if t132.manifest then
+				return t132.manifest
+			end
+
+			v3149("SenaVisual/cache")
+
+			local json = v3152(t132.base .. "manifest.json")
+
+			if json then
+				pcall(writefile, "SenaVisual/cache/manifest.json", json)
+			elseif isfile("SenaVisual/cache/manifest.json") then
+				json = readfile("SenaVisual/cache/manifest.json")
+			end
+
+			local ok, manifest = pcall(function()
+				return HttpService:JSONDecode(json)
+			end)
+
+			if ok and type(manifest) == "table" then
+				t132.manifest = manifest
+			end
+
+			return t132.manifest
+		end
+		t132.names = function(p783)
+			local t134 = {}
+			local v3159 = t132.loadManifest()
+			local ipairs_ = ipairs
+			local v3161 = v3159 and v3159[p783] or {}
+
+			for _, v in ipairs_(v3161) do
+				local name = v.name
+
+				if v.tier then
+					name = v.name .. " [" .. v.tier .. "]"
+				end
+
+				table.insert(t134, name)
+			end
+
+			return t134
+		end
+
+		local function v3165(p784, p785)
+			local v3166 = t132.loadManifest()
+			local ipairs_ = ipairs
+			local v3168 = v3166 and v3166[p784] or {}
+
+			for _, v in ipairs_(v3168) do
+				if v.name == p785 or v.name .. " [" .. tostring(v.tier) .. "]" == p785 then
+					return v
+				end
+			end
+
+			return nil
+		end
+		local function v3171(p786, p787)
+			local v3172 = "SenaVisual/cache" .. "/" .. p786
+
+			v3149(v3172)
+
+			local v3173 = v3172 .. "/" .. p787.file
+
+			if not isfile(v3173) then
+				t132.status = "Downloading " .. p787.name .. "..."
+
+				local v3174 = v3152(t132.base .. p786 .. "/" .. p787.file)
+
+				if not v3174 then
+					return nil, "Download failed"
+				end
+
+				writefile(v3173, v3174)
+			end
+
+			local ok, result = pcall(function()
+				return game:GetObjects(getcustomasset(v3173))
+			end)
+
+			if not ok or not (type(result) == "table" and result[1]) then
+				pcall(delfile, v3173)
+
+				return nil, "Could not load model"
+			end
+
+			return result[1]
+		end
+
+		t132.rodScale = 1
+		t132.fishWeight = 0
+
+		local function v3177(p788, p789, p790)
+			local t135 = {}
+
+			for _, descendant in ipairs(p788:GetDescendants()) do
+				if descendant:IsA("JointInstance") or descendant:IsA("WeldConstraint") then
+					descendant:Destroy()
+				elseif descendant:IsA("BasePart") then
+					table.insert(t135, descendant)
+				elseif descendant:IsA("Script") or descendant:IsA("LocalScript") then
+					descendant:Destroy()
+				end
+			end
+
+			if #t135 == 0 then
+				return nil
+			end
+
+			local Handle = p788:FindFirstChild("Handle", true)
+
+			if not Handle or not Handle:IsA("BasePart") then
+				Handle = t135[1]
+			end
+
+			if p789 or p790 and p790 ~= 1 then
+				local boundingBox, v3183 = p788:GetBoundingBox()
+				local v3184 = p790 or p789 / math.max(v3183.X, v3183.Y, v3183.Z, 0.01)
+
+				if not p789 then
+					boundingBox = Handle.CFrame
+				end
+
+				for _, v in ipairs(t135) do
+					local v3187 = boundingBox:ToObjectSpace(v.CFrame)
+
+					v.Size *= v3184
+					v.CFrame = boundingBox * (cFrameNew(v3187.Position * v3184) * v3187.Rotation)
+				end
+
+				for _, descendant in ipairs(p788:GetDescendants()) do
+					if descendant:IsA("Attachment") then
+						if not descendant.Parent:IsA("Bone") then
+							descendant.Position *= v3184
+						end
+					end
+				end
+			end
+
+			for _, v in ipairs(t135) do
+				v.Anchored = false
+				v.CanCollide = false
+				v.CanQuery = false
+				v.CanTouch = false
+				v.Massless = true
+
+				if v ~= Handle then
+					local Weld = Instance.new("Weld")
+
+					Weld.Part0 = Handle
+					Weld.Part1 = v
+					Weld.C0 = Handle.CFrame:ToObjectSpace(v.CFrame)
+					Weld.Parent = Handle
+				end
+			end
+
+			Handle.Name = "Handle"
+
+			return Handle, t135
+		end
+		local function v3193(p791, p792)
+			local vector32 = Vector3.zero
+			local vector33 = Vector3.zero
+
+			for _, v in ipairs(p792) do
+				if v ~= p791 and v.Transparency < 0.95 then
+					local v3198 = v.Size / 2
+
+					for _, v2 in ipairs({
+						-1,
+						1
+					}) do
+						for _, v3 in ipairs({
+							-1,
+							1
+						}) do
+							for _, v4 in ipairs({
+								-1,
+								1
+							}) do
+								local v3205 = p791.CFrame:PointToObjectSpace(v.CFrame:PointToWorldSpace(Vector3.new(v3198.X * v2, v3198.Y * v3, v3198.Z * v4)))
+
+								vector32 = vector32:Min(v3205)
+								vector33 = vector33:Max(v3205)
+							end
+						end
+					end
+				end
+			end
+
+			local v3206 = vector33 - vector32
+			local vector34
+
+			if v3206.Y <= v3206.X and v3206.Z <= v3206.X then
+				vector34 = Vector3.new(vector33.X >= -vector32.X and 1 or -1, 0, 0)
+			elseif v3206.Z <= v3206.Y then
+				vector34 = Vector3.new(0, vector33.Y >= -vector32.Y and 1 or -1, 0)
+			else
+				vector34 = Vector3.new(0, 0, vector33.Z >= -vector32.Z and 1 or -1)
+			end
+
+			local vector35 = Vector3.xAxis
+
+			if math.abs(vector34.X) > 0.5 then
+				vector35 = v3206.Z >= v3206.Y and Vector3.zAxis or Vector3.yAxis
+			elseif math.abs(vector34.Z) > 0.5 then
+				vector35 = v3206.X >= v3206.Y and Vector3.xAxis or Vector3.yAxis
+			end
+
+			local v3209 = -math.min(vector32:Dot(vector34), vector33:Dot(vector34))
+
+			return fromMatrix(Vector3.zero, vector35, vector34), math.max(0, v3209 - 0.6)
+		end
+
+		t132.updateBack = function()
+			local Backpack = LocalPlayer:FindFirstChild("Backpack")
+
+			for k, back in pairs(t132.backs) do
+				back(k == t132.backRod and Backpack ~= nil and k.Parent == Backpack)
+			end
+
+			task.defer(t132.refreshQuality)
+		end
+		t132.refreshQuality = function()
+			local v3213 = false
+			local Character = LocalPlayer.Character
+
+			if Character then
+				for _, child in ipairs(Character:GetChildren()) do
+					if child:IsA("Tool") and child:GetAttribute("SenaVisual") or child.Name == "SenaVisualBack" then
+						v3213 = true
+
+						break
+					end
+				end
+			end
+
+			if next(t132.remote) ~= nil then
+				v3213 = true
+			end
+
+			pcall(function()
+				if v3213 then
+					settings().Rendering.QualityLevel = Enum.QualityLevel.Level10
+				elseif senaV4Config.StartupBoost then
+					settings().Rendering.QualityLevel = Enum.QualityLevel.Level01
+				end
+			end)
+		end
+
+		local function v3217(p793, p794, p795)
+			local v3218 = Vector3.one * 1e9
+			local v3219 = -Vector3.one * 1e9
+			local v3220, v3221, v3222 = ipairs(p795)
+
+			for _, v in v3220, v3221, v3222 do
+				local v3225 = v.Size / 2
+
+				for _, v2 in ipairs({
+					-1,
+					1
+				}) do
+					for _, v3 in ipairs({
+						-1,
+						1
+					}) do
+						for _, v4 in ipairs({
+							-1,
+							1
+						}) do
+							local v3232 = v.CFrame:PointToWorldSpace(Vector3.new(v3225.X * v2, v3225.Y * v3, v3225.Z * v4))
+
+							v3218 = v3218:Min(v3232)
+							v3219 = v3219:Max(v3232)
+						end
+					end
+				end
+			end
+
+			local v3233 = v3219 - v3218
+			local t136 = {}
+			local n57 = 0
+			local vector32 = Vector3.zero
+			local v3237, v3238, v3239 = ipairs(p795)
+
+			for _, v in v3237, v3238, v3239 do
+				if v.Transparency < 0.95 then
+					local v3242 = math.max(v.Size.X * v.Size.Y * v.Size.Z, 0.0001)
+					local v3243 = v.Size / 2
+					local huge = math.huge
+
+					for _, v2 in ipairs({
+						-1,
+						1
+					}) do
+						for _, v3 in ipairs({
+							-1,
+							1
+						}) do
+							for _, v4 in ipairs({
+								-1,
+								1
+							}) do
+								huge = math.min(huge, v.CFrame:PointToWorldSpace(Vector3.new(v3243.X * v2, v3243.Y * v3, v3243.Z * v4)).Y)
+							end
+						end
+					end
+
+					table.insert(t136, {
+						y = huge,
+						vol = v3242
+					})
+					n57 += v3242
+					vector32 += v.Position * v3242
+				end
+			end
+
+			local v3251 = (v3218 + v3219) / 2 - Vector3.new(0, v3233.Y / 2, 0)
+
+			if n57 > 0 then
+				table.sort(t136, function(p796, p797)
+					return p796.y < p797.y
+				end)
+
+				local n58 = 0
+				local y = t136[1].y
+				local v3254, v3255, v3256 = ipairs(t136)
+				local v3257 = geniter(v3254, v3255, v3256)
+
+				while true do
+					local v3258 = table.pack(v3257())
+
+					if v3258[1] then
+						local v3259 = v3258[3]
+
+						n58 += v3259.vol
+						y = v3259.y
+
+						if n57 * 0.1 <= n58 then
+							break
+						end
+					else
+						break
+					end
+				end
+
+				local v3260 = vector32 / n57
+
+				v3251 = Vector3.new(v3260.X, y, v3260.Z)
+			end
+
+			local function v3261(p798)
+				for _, v in ipairs(p795) do
+					if v.Transparency < 0.95 then
+						local v3264 = v.CFrame:PointToObjectSpace(p798)
+						local v3265 = v.Size / 2 + Vector3.new(0.6, 0.6, 0.6)
+
+						if math.abs(v3264.X) <= v3265.X and math.abs(v3264.Y) <= v3265.Y and math.abs(v3264.Z) <= v3265.Z then
+							return true
+						end
+					end
+				end
+
+				return false
+			end
+
+			local n59 = 0
+
+			while true do
+				if n59 < 150 then
+					local v3267 = v3251 - Vector3.new(0, 1.6 + n59, 0)
+
+					if v3261(v3267) or v3261(v3267 - Vector3.new(0, 1.8, 0)) then
+						n59 += 1
+
+						continue
+					end
+
+					break
+				end
+
+				break
+			end
+
+			local function v3268(p799)
+				local vector33 = Vector3.new(p799.X, 0, p799.Z)
+
+				return vector33.Magnitude > 0.05 and vector33.Unit or nil
+			end
+
+			local v3270
+			local v3271, v3272, v3273 = ipairs(p795)
+			local v3274 = geniter(v3271, v3272, v3273)
+
+			while true do
+				local v3275 = table.pack(v3274())
+
+				if v3275[1] then
+					local v3276 = v3275[3]
+
+					if string.find(string.lower(v3276.Name), "eye", 1, true) then
+						v3270 = v3268(v3276.Position - v3251)
+
+						break
+					end
+				else
+					break
+				end
+			end
+
+			if not v3270 then
+				local v3277, v3278, v3279 = ipairs(p793:GetDescendants())
+
+				for _, v in v3277, v3278, v3279 do
+					local v3282 = string.lower(v.Name)
+
+					if not v:IsA("Attachment") or not v3282:find("head") and not v3282:find("eye") and not v3282:find("jaw") and not v3282:find("mouth") then
+						continue
+					end
+
+					v3270 = v3268(v.WorldPosition - v3251)
+
+					if v3270 then
+						break
+					end
+				end
+			end
+
+			local vector33 = v3270 or v3268(p794.CFrame.LookVector) or Vector3.zAxis
+			local t137 = {
+				lift = n59,
+				rootRel = cFrameNew(v3251):ToObjectSpace(p794.CFrame),
+				turn = lookAt(Vector3.zero, vector33):Inverse()
+			}
+
+			return t137
+		end
+		local function v3285(p800, p801, p802, p803)
+			local v3286, v3287 = v3171(p800, p801)
+
+			if not v3286 then
+				return nil, v3287
+			end
+
+			local v3288, v3289
+
+			if p800 == "fish" then
+				local v3290 = tonumber(p801.minKg)
+				local v3291 = tonumber(p801.bigMaxKg) or tonumber(p801.maxKg)
+				local n60 = 1
+
+				if v3290 and v3290 > 0 and v3291 then
+					n60 = math.max(1, (v3290 + (v3291 - v3290) * (p802 or 0)) / v3290)
+				end
+
+				if (tonumber(p801.nativeLen) or 0) > 50 then
+					n60 *= 0.8
+				end
+
+				v3288, v3289 = v3177(v3286, nil, n60)
+			else
+				v3288, v3289 = v3177(v3286, nil, p803 or 1)
+			end
+
+			if not v3288 then
+				v3286:Destroy()
+
+				return nil, "Empty model"
+			end
+
+			v3288.Parent = v3286
+
+			local t138 = {
+				model = v3286,
+				handle = v3288,
+				kind = p800
+			}
+
+			if p800 == "fish" then
+				t138.overhead = v3217(v3286, v3288, v3289)
+				v3288.Name = "FishRoot"
+			else
+				local v3294, v3295 = v3193(v3288, v3289)
+
+				t138.rodAxis = v3294
+				t138.gripShift = v3295
+				v3288.Name = "RodRoot"
+			end
+
+			return t138
+		end
+		local function v3296(p804)
+			local clone = p804.model:Clone()
+
+			clone.Name = "SenaVisualBack"
+
+			for _, descendant in ipairs(clone:GetDescendants()) do
+				if descendant:IsA("BasePart") then
+					descendant.Size *= 0.8
+				elseif descendant:IsA("Weld") then
+					descendant.C0 = cFrameNew(descendant.C0.Position * 0.8) * descendant.C0.Rotation
+				elseif descendant:IsA("Attachment") then
+					if not descendant.Parent:IsA("Bone") then
+						descendant.Position *= 0.8
+					end
+				end
+			end
+
+			return clone, clone:FindFirstChild("RodRoot", true)
+		end
+		local function createWeld(p805, p806, p807, p808)
+			local UpperTorso = p805 and (p805:FindFirstChild("UpperTorso") or p805:FindFirstChild("Torso"))
+
+			if not UpperTorso or not p807 then
+				return nil
+			end
+
+			p806.Parent = p805
+
+			local Weld = Instance.new("Weld")
+
+			Weld.Part0 = UpperTorso
+			Weld.Part1 = p807
+			Weld.C0 = v3148 * cFrameNew(0, p808.gripShift * 0.8, 0) * p808.rodAxis:Inverse()
+			Weld.Parent = p807
+
+			return Weld
+		end
+		local function v3303(p809, p810, p811)
+			local RightHand = p809 and p809:FindFirstChild("RightHand")
+			local UpperTorso = p809 and p809:FindFirstChild("UpperTorso")
+
+			if not RightHand or not UpperTorso then
+				local function v3306()
+				end
+
+				return v3306
+			end
+
+			local t139 = {}
+
+			for k, v in pairs(t133) do
+				local v3310 = p809:FindFirstChild(k, true)
+
+				if v3310 and v3310:IsA("Motor6D") then
+					t139[v3310] = v
+				end
+			end
+
+			local u3311 = true
+			local Weld
+			local connection = RunService.PreSimulation:Connect(function()
+				for k, v in pairs(t139) do
+					k.Transform = v
+				end
+			end)
+
+			task.spawn(function()
+				RunService.PostSimulation:Wait()
+				RunService.PostSimulation:Wait()
+
+				if not u3311 or not p810.Parent then
+					return
+				end
+
+				local v3316 = UpperTorso.CFrame:PointToObjectSpace(RightHand.Position) + Vector3.new(0, 0, -0.1)
+				local Unit2 = (Vector3.xAxis - Unit * Vector3.xAxis:Dot(Unit)).Unit
+
+				Weld = Instance.new("Weld")
+				Weld.Part0 = UpperTorso
+				Weld.Part1 = p810
+				Weld.C0 = fromMatrix(v3316, Unit2, Unit) * cFrameNew(0, p811.gripShift, 0) * p811.rodAxis:Inverse()
+				Weld.Parent = p810
+			end)
+
+			local function v3318()
+				u3311 = false
+				connection:Disconnect()
+
+				if Weld then
+					Weld:Destroy()
+				end
+			end
+
+			return v3318
+		end
+		local function v3319(p812, p813, p814)
+			local Head = p812 and p812:FindFirstChild("Head")
+
+			if not Head then
+				local function v3321()
+				end
+
+				return v3321
+			end
+
+			local overhead = p814.overhead
+			local Weld = Instance.new("Weld")
+
+			Weld.Part0 = Head
+			Weld.Part1 = p813
+			Weld.C0 = cFrameNew(0, Head.Size.Y / 2 + 1 + overhead.lift, 0) * overhead.turn * overhead.rootRel
+			Weld.Parent = p813
+
+			local cFrame = Angles(3.1415926535897931, 0, 0)
+			local RightShoulder = p812:FindFirstChild("RightShoulder", true)
+			local LeftShoulder = p812:FindFirstChild("LeftShoulder", true)
+			local RightElbow = p812:FindFirstChild("RightElbow", true)
+			local LeftElbow = p812:FindFirstChild("LeftElbow", true)
+			local connection = RunService.PreSimulation:Connect(function()
+				if RightShoulder then
+					RightShoulder.Transform = cFrame * Angles(0, 0, -0.20943951023931956)
+				end
+
+				if LeftShoulder then
+					LeftShoulder.Transform = cFrame * Angles(0, 0, 0.20943951023931956)
+				end
+
+				if RightElbow then
+					RightElbow.Transform = cFrameNew()
+				end
+
+				if LeftElbow then
+					LeftElbow.Transform = cFrameNew()
+				end
+			end)
+
+			local function v3330()
+				connection:Disconnect()
+				Weld:Destroy()
+			end
+
+			return v3330
+		end
+		local function createTool(p815, p816)
+			local v3332, v3333 = v3285(p815, p816, t132.fishWeight, t132.rodScale)
+
+			if not v3332 then
+				return nil, v3333
+			end
+
+			local model = v3332.model
+			local handle = v3332.handle
+			local Tool = Instance.new("Tool")
+
+			Tool.Name = p816.name
+			Tool.CanBeDropped = false
+			Tool.RequiresHandle = false
+			Tool:SetAttribute("SenaVisual", p815)
+
+			if p815 == "fish" then
+				Tool:SetAttribute("ItemType", "Phone")
+				Tool.ToolTip = tostring(p816.tier or "Fish")
+			else
+				Tool.ToolTip = "Rod"
+			end
+
+			if p816.icon then
+				Tool.TextureId = p816.icon
+			end
+
+			local v3337
+			local v3338
+
+			if p815 == "rods" then
+				v3337, v3338 = v3296(v3332)
+			end
+
+			for _, child in ipairs(model:GetChildren()) do
+				child.Parent = Tool
+			end
+
+			model:Destroy()
+			Tool.Equipped:Connect(function()
+				task.defer(t132.refreshQuality)
+			end)
+			Tool.Unequipped:Connect(function()
+				task.defer(t132.refreshQuality)
+			end)
+
+			local u3341
+
+			if p815 == "rods" then
+				local u3342
+
+				t132.backs[Tool] = function(p817)
+					local Character = LocalPlayer.Character
+
+					if not p817 or not Character then
+						v3337.Parent = nil
+					elseif v3337.Parent ~= Character then
+						if u3342 then
+							u3342:Destroy()
+						end
+
+						u3342 = createWeld(Character, v3337, v3338, v3332)
+					end
+				end
+				Tool.Destroying:Connect(function()
+					t132.backs[Tool] = nil
+					v3337:Destroy()
+				end)
+				Tool.Equipped:Connect(function()
+					t132.backRod = Tool
+					t132.updateBack()
+
+					if u3341 then
+						u3341()
+					end
+
+					u3341 = v3303(Tool.Parent, handle, v3332)
+				end)
+				Tool.Unequipped:Connect(function()
+					if u3341 then
+						u3341()
+						u3341 = nil
+					end
+
+					t132.backRod = Tool
+					task.defer(t132.updateBack)
+				end)
+			else
+				Tool.Equipped:Connect(function()
+					if u3341 then
+						u3341()
+					end
+
+					u3341 = v3319(Tool.Parent, handle, v3332)
+				end)
+				Tool.Unequipped:Connect(function()
+					if u3341 then
+						u3341()
+						u3341 = nil
+					end
+				end)
+			end
+
+			return Tool
+		end
+
+		t132.spawn = function(p818, p819)
+			local v3344 = v3165(p818, p819)
+
+			if not v3344 then
+				t132.status = "Pick an item first"
+
+				return false
+			end
+
+			local Backpack = LocalPlayer:FindFirstChild("Backpack")
+
+			if not Backpack then
+				t132.status = "Backpack not ready"
+
+				return false
+			end
+
+			local v3346 = Backpack:FindFirstChild(v3344.name)
+
+			if v3346 and v3346:GetAttribute("SenaVisual") then
+				t132.status = v3344.name .. " is already in your backpack"
+
+				return true
+			end
+
+			t132.status = "Loading " .. v3344.name .. "..."
+
+			local v3347, v3348 = createTool(p818, v3344)
+
+			if not v3347 then
+				t132.status = v3344.name .. ": " .. tostring(v3348)
+
+				return false
+			end
+
+			v3347.Parent = Backpack
+
+			if p818 == "rods" then
+				t132.backRod = v3347
+				t132.updateBack()
+			end
+
+			t132.spawned[p818 .. "|" .. v3344.name] = {
+				kind = p818,
+				label = v3344.name
+			}
+			t132.status = v3344.name .. " added to your backpack"
+
+			return true
+		end
+		t132.respawn = function(p820)
+			local t140 = {}
+
+			for k, v in pairs(t132.spawned) do
+				if v.kind == p820 then
+					t140[k] = v
+				end
+			end
+
+			for _, v in pairs(t140) do
+				local ipairs_ = ipairs
+				local t141 = {
+					LocalPlayer:FindFirstChild("Backpack"),
+					LocalPlayer.Character
+				}
+
+				for _, v2 in ipairs_(t141) do
+					local VLabel = v2 and v2:FindFirstChild(v.label)
+
+					if VLabel and VLabel:IsA("Tool") and VLabel:GetAttribute("SenaVisual") then
+						VLabel:Destroy()
+					end
+				end
+
+				t132.spawn(v.kind, v.label)
+			end
+		end
+		t132.clear = function()
+			t132.spawned = {}
+
+			local ipairs_ = ipairs
+			local t142 = {
+				LocalPlayer:FindFirstChild("Backpack"),
+				LocalPlayer.Character
+			}
+
+			for _, v in ipairs_(t142) do
+				if v then
+					for _, child in ipairs(v:GetChildren()) do
+						if child:IsA("Tool") and child:GetAttribute("SenaVisual") then
+							child:Destroy()
+						end
+					end
+				end
+			end
+
+			t132.status = "Removed all visual items"
+			task.defer(t132.refreshQuality)
+		end
+
+		local function v3365(p821)
+			local v3366 = t132.remote[p821]
+
+			if not v3366 then
+				return
+			end
+
+			t132.remote[p821] = nil
+
+			for _, v in ipairs(v3366.cleanup) do
+				pcall(v)
+			end
+		end
+		local function v3369(p822)
+			local v3370, v3371, v3372 = string.match(p822 or "", "^(%a+)|([^|]+)|?(.*)$")
+
+			return v3370, v3371, tonumber(v3372)
+		end
+		local function v3373(p823, p824, p825)
+			local playerByUserId = Players:GetPlayerByUserId(tonumber(p823) or 0)
+			local Character = playerByUserId and playerByUserId.Character
+
+			if not Character then
+				v3365(p823)
+
+				return
+			end
+
+			local v3376 = p824 .. "#" .. p825
+			local v3377 = t132.remote[p823]
+
+			if v3377 and v3377.key == v3376 and v3377.char == Character then
+				return
+			end
+
+			v3365(p823)
+
+			local t143 = {
+				key = v3376,
+				char = Character,
+				cleanup = {}
+			}
+
+			t132.remote[p823] = t143
+
+			local v3379, v3380, v3381 = v3369(p824)
+			local v3382 = (v3379 == "rods" or v3379 == "fish") and v3165(v3379, v3380) or nil
+
+			if v3382 then
+				local v3383 = v3285(v3379, v3382, v3379 == "fish" and (v3381 or 0) or 0, v3379 == "rods" and (v3381 or 1) or 1)
+
+				if v3383 and t132.remote[p823] == t143 and Character.Parent then
+					v3383.model.Name = "SenaVisualRemote"
+					v3383.model.Parent = Character
+					table.insert(t143.cleanup, (v3379 == "rods" and v3303 or v3319)(Character, v3383.handle, v3383))
+					table.insert(t143.cleanup, function()
+						v3383.model:Destroy()
+					end)
+				elseif v3383 then
+					v3383.model:Destroy()
+				end
+			end
+
+			local v3384, v3385 = v3369(p825)
+			local v3386 = v3384 == "rods" and v3165("rods", v3385) or nil
+
+			if v3386 and t132.remote[p823] == t143 then
+				local v3387 = v3285("rods", v3386, 0, 1)
+
+				if v3387 and t132.remote[p823] == t143 and Character.Parent then
+					local v3388, v3389 = v3296(v3387)
+
+					v3387.model:Destroy()
+					createWeld(Character, v3388, v3389, v3387)
+					table.insert(t143.cleanup, function()
+						v3388:Destroy()
+					end)
+				elseif v3387 then
+					v3387.model:Destroy()
+				end
+			end
+
+			task.defer(t132.refreshQuality)
+		end
+
+		task.spawn(function()
+			while v16() do
+				local n61 = 6
+
+				pcall(function()
+					if #Players:GetPlayers() <= 1 then
+						for k in pairs(t132.remote) do
+							v3365(k)
+						end
+
+						return
+					end
+
+					local SenaBackend = genv.SenaBackend or {}
+					local Api = SenaBackend.Api or "http://56.10.112.179:8080"
+					local s9 = ""
+					local s10 = ""
+					local Character = LocalPlayer.Character
+
+					if Character then
+						for _, child in ipairs(Character:GetChildren()) do
+							local attribute = child:IsA("Tool") and child:GetAttribute("SenaVisual")
+
+							if attribute then
+								s9 = attribute .. "|" .. child.Name .. "|" .. tostring(attribute == "fish" and t132.fishWeight or t132.rodScale)
+
+								break
+							end
+						end
+
+						if Character:FindFirstChild("SenaVisualBack") and t132.backRod then
+							s10 = "rods|" .. t132.backRod.Name
+						end
+					end
+
+					local data = HttpService:JSONDecode(game:HttpGet(string.format("%s/vstate?key=%s&job=%s&uid=%d&held=%s&back=%s", Api, HttpService:UrlEncode(SenaBackend.Key or "sena_20VvixjHsd1OPPwgHYJAstpM"), HttpService:UrlEncode(game.JobId), LocalPlayer.UserId, HttpService:UrlEncode(s9), HttpService:UrlEncode(s10)), true))
+
+					if type(data) ~= "table" or data.ok ~= true then
+						return
+					end
+
+					n61 = tonumber(data.poll) or 4
+
+					local t144 = {}
+					local pairs_ = pairs
+					local players = data.players or {}
+
+					for k, player in pairs_(players) do
+						local v3406 = tostring(k)
+
+						t144[v3406] = true
+						v3373(v3406, tostring(player.held or ""), tostring(player.back or ""))
+					end
+
+					for k in pairs(t132.remote) do
+						if not t144[k] then
+							v3365(k)
+						end
+					end
+				end)
+				task.wait(n61)
+			end
+
+			for k in pairs(t132.remote) do
+				v3365(k)
+			end
+		end)
+		LocalPlayer.CharacterAdded:Connect(function()
+			if not v16() then
+				return
+			end
+
+			task.wait(1.5)
+
+			for _, v in pairs(t132.spawned) do
+				pcall(t132.spawn, v.kind, v.label)
+			end
+		end)
+
+		return t132
+	end
+
+	genv.__SenaV4Visual = v3143()
 end
 
 do
@@ -20006,6 +22897,7 @@ do
 				task.wait(1)
 			end
 		end)
+		genv.__SenaV4ScrambleTradeIn = t151
 	end
 
 	v3471()
@@ -20543,6 +23435,7 @@ do
 				task.wait(0.25)
 			end
 		end)
+		genv.__SenaV4ScrambleBoss = t163
 	end
 
 	v3583()
@@ -20626,6 +23519,13 @@ do
 		end
 		local function v3705(p870)
 			return v3703(p870)
+		end
+		local function v3706(p871)
+			if typeof(p871) == "Color3" then
+				return string.format("#%02x%02x%02x", math.floor(p871.R * 255), math.floor(p871.G * 255), math.floor(p871.B * 255))
+			end
+
+			return "#ffffff"
 		end
 		local function v3707(p872)
 			local Directory = Assets.Directory and Assets.Directory[p872]
@@ -25523,10 +28423,12 @@ do
 		local v4519
 		local v4520
 		local v4521
-		local v4522, v4523, v4524, v4525, v4526, v4527, v4528
-		local v4536, v4538, v4539, v4540, v4541
-		local v4542, v4543, v4544, v4546
-		local runOnce
+		local v4522, v4523, v4524, v4525, v4526, v4527, v4528, v4529, v4530, v4531
+		local v4532, v4533, v4534, v4535, v4536, v4537, v4538, v4539, v4540, v4541
+		local v4542, v4543, v4544, v4545, v4546, v4547, v4548, v4549, v4550, v4551
+		local v4552, v4553, v4554, v4555, v4556, v4557, v4558, v4559, v4560, v4561
+		local v4562, runOnce, v4564, v4565, v4566, v4567, v4568, v4569, v4570, v4571
+		local v4572, v4573, v4574, v4575, v4576, v4577
 
 		do
 			local AssetEarnings
@@ -25559,6 +28461,32 @@ do
 				end
 
 				return 0
+			end
+			local function v4584(p976)
+				local v4585 = string.lower(tostring(p976 or "")):gsub("[%s,]", "")
+
+				if v4585 == "" then
+					return 0
+				end
+
+				local v4586, v4587 = string.match(v4585, "^([%d]+%.?[%d]*)([kmb]?)$")
+				local v4588 = tonumber(v4586)
+
+				if not v4588 then
+					return 0
+				end
+
+				local n81 = 1
+
+				if v4587 == "k" then
+					n81 = 1000
+				elseif v4587 == "m" then
+					n81 = 1000000
+				elseif v4587 == "b" then
+					n81 = 1e9
+				end
+
+				return v4588 * n81
 			end
 
 			local u4590 = false
@@ -26028,7 +28956,67 @@ do
 				end
 			end
 
+			local function v4688()
+				return genv.__SenaV4TreadmillManager
+			end
 
+			v4529 = function(p984)
+				senaV4Config.AutoTreadmillIdle = p984 == true
+
+				local v4689 = v4688()
+
+				if v4689 then
+					v4689:setIdleFarm(senaV4Config.AutoTreadmillIdle and not senaV4Config.AntiTreadmill)
+				end
+			end
+			v4530 = function(p985)
+				senaV4Config.AntiTreadmill = p985 == true
+
+				local v4690 = v4688()
+
+				if senaV4Config.AntiTreadmill then
+					if v4690 then
+						v4690:setIdleFarm(false)
+					end
+
+					t145.startAntiTreadmillLoop()
+				elseif v4690 then
+					v4690:setIdleFarm(senaV4Config.AutoTreadmillIdle)
+				end
+			end
+			v4531 = function(p986)
+				senaV4Config.HopNoMatch = p986 == true
+
+				if senaV4Config.HopNoMatch then
+					t145.startHopLoop()
+				end
+			end
+			v4532 = function(p987)
+				if type(p987) == "table" then
+					p987 = p987[1]
+				end
+
+				senaV4Config.PrivateServerMax = tostring(p987 or "2")
+			end
+			v4533 = function(p988)
+				senaV4Config.PrivateServerAuto = p988 == true
+
+				if senaV4Config.PrivateServerAuto then
+					t145.startPrivateAutoHop()
+				end
+			end
+			v4534 = function(p989)
+				senaV4Config.HopCooldown = math.max(1, math.floor(tonumber(p989) or 5))
+			end
+			v4535 = function(p990)
+				senaV4Config.AutoTreadmillUpgrade = p990 == true
+
+				local v4691 = v4688()
+
+				if v4691 then
+					v4691:setAutoUpgrade(senaV4Config.AutoTreadmillUpgrade)
+				end
+			end
 			v4536 = function(p991)
 				local v4692 = type(p991) == "string" and p991 or ""
 				local stealMode = (v4692:find("Fly") or v4692:find("High")) and "Fly" or "Instant"
@@ -26039,6 +29027,15 @@ do
 
 				if v612 then
 					v612:setStealMode(stealMode, flyAerial)
+				end
+			end
+			v4537 = function(p992)
+				local v4695 = math.floor(math.clamp(math.floor((tonumber(p992) or 600) + 0.5), 500, 1000) / 10 + 0.5)
+
+				v223(v4695)
+
+				if v612 then
+					v612:setSpeed(v4695)
 				end
 			end
 			v4538 = function(p993, p994, p995)
@@ -26122,8 +29119,73 @@ do
 				v612:setEspOption("mutation", t215.Mutation == true)
 				v612:setEspOption("placed", t215["Placed Eggs"] == true)
 			end
+			v4545 = function(p1002)
+				senaV4Config.ScrambleTradeInBanners = v4320(p1002)
+			end
 			v4546 = function(p1003)
 				t145.setBackpackRates(p1003 == true)
+			end
+			v4547 = function(p1004)
+				senaV4Config.AntiGuardKnockback = p1004 == true
+
+				local __SenaV4AntiGuard = genv.__SenaV4AntiGuard
+
+				if __SenaV4AntiGuard and type(__SenaV4AntiGuard.setEnabled) == "function" then
+					pcall(__SenaV4AntiGuard.setEnabled, __SenaV4AntiGuard, senaV4Config.AntiGuardKnockback)
+				end
+			end
+			v4548 = function(p1005)
+				senaV4Config.AutoFavorite = p1005 == true
+			end
+			v4549 = function(p1006)
+				senaV4Config.FavMode = p1006 == "Species" and "Species" or "Rarity"
+			end
+			v4550 = function(p1007)
+				senaV4Config.FavRarities = v4320(p1007)
+			end
+			v4551 = function(p1008)
+				senaV4Config.FavSpecies = v4320(p1008)
+			end
+			v4552 = function(p1009)
+				senaV4Config.AutoEquipBest = p1009 == true
+			end
+			v4553 = function(p1010)
+				senaV4Config.AutoClaimOffline = p1010 == true
+			end
+			v4554 = function(p1011)
+				senaV4Config.AutoBaseUpgrade = p1011 == true
+			end
+			v4555 = function(p1012)
+				senaV4Config.AutoClaimAlmanac = p1012 == true
+			end
+			v4556 = function(p1013)
+				senaV4Config.AutoFusePets = p1013 == true
+			end
+			v4557 = function(p1014)
+				senaV4Config.FuseSelectedOnly = p1014 == "Selected Species"
+			end
+			v4558 = function(p1015)
+				senaV4Config.FuseRarities = v4320(p1015)
+			end
+			v4559 = function(p1016)
+				senaV4Config.FuseSpecies = v4320(p1016)
+			end
+			v4560 = function(p1017)
+				local __SenaV4Roaming = genv.__SenaV4Roaming
+
+				if __SenaV4Roaming and type(__SenaV4Roaming.setNoclip) == "function" then
+					pcall(__SenaV4Roaming.setNoclip, p1017 == true)
+				end
+			end
+			v4561 = function(p1018)
+				local __SenaV4Roaming = genv.__SenaV4Roaming
+
+				if __SenaV4Roaming and type(__SenaV4Roaming.setBottingMode) == "function" then
+					pcall(__SenaV4Roaming.setBottingMode, p1018 == true)
+				end
+			end
+			v4562 = function(p1019)
+				senaV4Config.AntiCutscene = p1019 == true
 			end
 			runOnce = function(p1020, p1021, p1022)
 				local v4708 = senaV4Config[p1020]
@@ -26146,24 +29208,277 @@ do
 			end
 			t24.runOnce = runOnce
 
+			local function v4710(p1023)
+				senaV4Config.ScrambleFarmDrones = p1023 == true
+			end
+			local function v4711(p1024)
+				senaV4Config.ScrambleLostParts = p1024 == true
+			end
+			local function v4712(p1025)
+				senaV4Config.ScrambleCollectSamples = p1025 == true
+			end
+			local function v4713(p1026)
+				senaV4Config.ScrambleAutoVault = p1026 == true
+			end
 
+			v4564 = function(p1027)
+				senaV4Config.ScrambleAutoBuy = p1027 == true
+			end
 
+			local function v4714(p1028)
+				senaV4Config.ScrambleAreas = v4320(p1028)
+			end
+			local function v4715(p1029)
+				senaV4Config.ScrambleDroneTypes = v4320(p1029)
+			end
 
+			v4565 = function(p1030)
+				senaV4Config.ScrambleBuyList = v4320(p1030)
+			end
+			v4566 = function(p1031)
+				senaV4Config.AutoPlace = p1031 == true
+
+				if senaV4Config.AutoPlace then
+					task.spawn(t24.AutoPlaceLoop)
+				end
+			end
+			v4567 = function(p1032)
+				senaV4Config.AutoHatch = p1032 == true
+
+				if senaV4Config.AutoHatch then
+					task.spawn(t24.AutoHatchLoop)
+				end
+			end
+			v4568 = function(p1033)
+				senaV4Config.AutoMutation = p1033 == true
+
+				if senaV4Config.AutoMutation then
+					task.spawn(t24.AutoMutationLoop)
+				end
+			end
+			v4569 = function(p1034)
+				senaV4Config.AutoRingEvent = p1034 == true
+
+				if senaV4Config.AutoRingEvent then
+					t24.RingEventLoop()
+				end
+			end
+			v4570 = function(p1035)
+				senaV4Config.MutationChoice = p1035 == "Fractured" and "Fractured" or "Scrambled"
+			end
+			v4571 = function(p1036)
+				senaV4Config.MutationSpecies = v4320(p1036)
+			end
+			v4572 = function(p1037)
+				senaV4Config.MutationRarities = v4320(p1037)
+			end
+			v4573 = function(p1038)
+				senaV4Config.MutationRetry = p1038 == true
+			end
+			v4574 = function(p1039)
+				senaV4Config.AutoSell = p1039 == true
+
+				if senaV4Config.AutoSell then
+					t24.startAutoSellLoop()
+				end
+			end
+			v4575 = function(p1040)
+				senaV4Config.AutoSellEgg = p1040 == true
+
+				if senaV4Config.AutoSellEgg then
+					t24.startAutoSellEggLoop()
+				end
+			end
+			v4576 = function(p1041)
+				senaV4Config.SellPetMaxRate = v4584(p1041)
+			end
+			v4577 = function(p1042)
+				senaV4Config.SellEggMaxRate = v4584(p1042)
+			end
 		end
 
 		local u4716 = false
 
+		local function v4717(p1043)
+			local v4718 = senaV4Config.StartupBoost == true
 
-		local v4730, v4731
-		local v4732, __SenaV4PlayerSteal, v4737, v4738, v4739, v4740, v4741
-		local v4742, t216
+			senaV4Config.StartupBoost = p1043 == true
+
+			if not senaV4Config.StartupBoost then
+				u4716 = false
+
+				if v4718 or t15.snapshot then
+					task.spawn(t15.revert)
+				end
+
+				return
+			end
+
+			if senaV4Config.StartupBoost and not u4716 then
+				u4716 = true
+				task.spawn(function()
+					task.wait(1.5)
+
+					if v16() and senaV4Config.StartupBoost then
+						v390()
+					end
+
+					task.wait(4)
+
+					if v16() and senaV4Config.StartupBoost then
+						v390()
+					end
+				end)
+			end
+		end
+		local function v4719(p1044)
+			if p1044 == true then
+				task.spawn(v391)
+			end
+		end
+		local function v4720(p1045)
+			local __SenaV4SetCapFps = genv.__SenaV4SetCapFps
+
+			if type(__SenaV4SetCapFps) == "function" then
+				__SenaV4SetCapFps(p1045 == true and 240 or 60)
+			end
+		end
+
+		local v4722, v4723, v4724, v4725, v4726, v4727, v4728, v4729, v4730, v4731
+		local v4732, __SenaV4PlayerSteal, v4734, v4735, v4736, v4737, v4738, v4739, v4740, v4741
+		local v4742, t216, t217, u4745, t218
 
 		do
+			local function v4747()
+				return genv.__SenaV4MovementExtras
+			end
 
+			v4722 = function(p1046)
+				senaV4Config.FlyForCapture = p1046 == true
 
+				local v4748 = v4747()
 
+				if v4748 then
+					v4748:setFlyForCapture(senaV4Config.FlyForCapture)
+				end
+			end
+			v4723 = function(p1047)
+				senaV4Config.InstantGrab = p1047 == true
 
+				local v4749 = v4747()
 
+				if v4749 then
+					v4749:setInstantGrab(senaV4Config.InstantGrab)
+				end
+			end
+
+			local function v4750(p1048)
+				genv.__SenaV4AdminBoost = p1048 == true
+
+				if v612 then
+					v612:setSpeed(senaV4Config.TweenSpeedMultiplier or 60)
+				end
+
+				genv.__SenaV4AdminBoostSpeedGen = (genv.__SenaV4AdminBoostSpeedGen or 0) + 1
+
+				local __SenaV4AdminBoostSpeedGen = genv.__SenaV4AdminBoostSpeedGen
+
+				if p1048 == true then
+					task.spawn(function()
+						local RunService2 = game:GetService("RunService")
+						local v4753
+						local v4754
+
+						while genv.__SenaV4AdminBoostSpeedGen == __SenaV4AdminBoostSpeedGen and v16() do
+							local Character = LocalPlayer.Character
+							local Humanoid = Character and Character:FindFirstChildOfClass("Humanoid")
+
+							if Humanoid then
+								local WalkSpeed = Humanoid.WalkSpeed
+
+								if v4753 == nil or v4754 == nil or math.abs(WalkSpeed - v4754) > 0.5 then
+									v4753 = WalkSpeed > 900 and WalkSpeed / 10 or WalkSpeed
+								end
+
+								if v4753 and v4753 > 0 then
+									local walkSpeed = v4753 * 10
+
+									Humanoid.WalkSpeed = walkSpeed
+									v4754 = walkSpeed
+								end
+							else
+								v4753 = nil
+								v4754 = nil
+							end
+
+							RunService2.Heartbeat:Wait()
+						end
+					end)
+				end
+			end
+
+			v4724 = function(p1049)
+				senaV4Config.AutoStealCapture = p1049 == true
+			end
+			v4725 = function(p1050)
+				senaV4Config.InfiniteJump = p1050 == true
+
+				local v4759 = v4747()
+
+				if v4759 then
+					v4759:setInfiniteJump(senaV4Config.InfiniteJump)
+				end
+			end
+
+			local function v4760(p1051)
+				senaV4Config.WalkSpeedMultiplier = math.clamp(tonumber(p1051) or 1, 1, 2.1)
+
+				local v4761 = v4747()
+
+				if v4761 then
+					v4761:setSpeedMultiplier(senaV4Config.WalkSpeedMultiplier)
+				end
+			end
+
+			v4726 = function(p1052)
+				senaV4Config.AntiHitGuard = p1052 == true
+
+				local __SenaV4AntiHitGuard = genv.__SenaV4AntiHitGuard
+
+				if __SenaV4AntiHitGuard then
+					__SenaV4AntiHitGuard:setEnabled(senaV4Config.AntiHitGuard)
+				end
+			end
+			v4727 = function(p1053)
+				senaV4Config.AntiAFK = p1053 == true
+				genv.__SenaV4AntiAfkEnabled = senaV4Config.AntiAFK
+
+				if type(genv.__SenaV4SetAntiAfkEnabled) == "function" then
+					genv.__SenaV4SetAntiAfkEnabled(senaV4Config.AntiAFK)
+				end
+			end
+			v4728 = function(p1054)
+				senaV4Config.AutoReconnect = p1054 == true
+				v2526.autoReconnect = senaV4Config.AutoReconnect
+
+				if getgenv then
+					getgenv().SNE_AutoReconnect = senaV4Config.AutoReconnect
+				end
+			end
+			v4729 = function(p1055)
+				senaV4Config.AutoExecute = p1055 == true
+				v2526.autoExecute = senaV4Config.AutoExecute
+
+				if getgenv then
+					getgenv().SNE_AutoExecute = senaV4Config.AutoExecute
+				end
+
+				if p1055 then
+					pcall(v2528)
+				else
+					pcall(v2530)
+				end
+			end
 
 			local function v4763()
 				local __SenaV4IdentitySetter = genv.__SenaV4IdentitySetter or type(setthreadidentity) == "function" and setthreadidentity or type(set_thread_identity) == "function" and set_thread_identity or type(setidentity) == "function" and setidentity or type(syn) == "table" and type(syn.set_thread_identity) == "function" and syn.set_thread_identity
@@ -26198,6 +29513,16 @@ do
 				return v4767
 			end
 			__SenaV4PlayerSteal = genv.__SenaV4PlayerSteal
+			v4734 = function(p1058)
+				senaV4Config.StealPlayers = p1058 == true
+
+				if __SenaV4PlayerSteal then
+					__SenaV4PlayerSteal:setEnabled(senaV4Config.StealPlayers)
+				end
+			end
+			v4735 = function(p1059)
+				senaV4Config.StealPlayerRarities = v4320(p1059)
+			end
 
 			local function v4768(p1060)
 				local v4769 = string.lower(tostring(p1060 or "")):gsub("[%s,]", "")
@@ -26228,6 +29553,9 @@ do
 				return v4772
 			end
 
+			v4736 = function(p1061)
+				senaV4Config.StealPlayerMinValue = v4768(p1061)
+			end
 			v4737 = function(p1062)
 				senaV4Config.AutoIndex = p1062 == true
 
@@ -26343,15 +29671,96 @@ do
 
 			v4730()
 			v4742 = SenaLibOverride:Window({
-				Title = "Sena BETA |",
+				Title = "OLIVET BETA |",
 				Footer = "Steal An Egg",
 				Folder = "SenaSAEv4",
 				Version = 1,
 				Color = Color3.fromRGB(232, 232, 238),
-				Image = "http://56.10.112.179:8080/visual/sena_bg.jpg"
+				Image = "https://files.catbox.moe/v6ajgu.png"
 			})
 			v4779(v4742)
 			t216 = {}
+			t217 = { "Respawn Point" }
+
+			local __SenaV4Roaming = genv.__SenaV4Roaming
+
+			if __SenaV4Roaming and type(__SenaV4Roaming.waypointList) == "function" then
+				local ok, result = pcall(__SenaV4Roaming.waypointList)
+
+				if ok and type(result) == "table" and #result > 0 then
+					t217 = result
+				end
+			end
+
+			u4745 = t217[1]
+			t218 = {}
+
+			local __SenaV4ScrambleRuntime = genv.__SenaV4ScrambleRuntime
+
+			if __SenaV4ScrambleRuntime and type(__SenaV4ScrambleRuntime.snapshot) == "function" then
+				pcall(function()
+					local v4788 = __SenaV4ScrambleRuntime.snapshot()
+
+					if v4788 and type(v4788.Shop) == "table" then
+						for _, v in pairs(v4788.Shop) do
+							if v and v.Label then
+								t218[#t218 + 1] = tostring(v.Label)
+							end
+						end
+					end
+				end)
+			end
+
+			local v4791 = v4742:AddTab({
+				Name = "Admin Abuse",
+				Icon = "flame"
+			})
+
+			t216.autoStealCapture = v4791:AddSection("Capture The Egg"):AddToggle({
+				Title = "Auto Steal Capture",
+				Content = "For the Capture The Egg event. Grabs the event egg for you and keeps you holding it in a safe spot so your time keeps going. Turn off normal Auto Steal while using this.",
+				Default = false,
+				Callback = v4732(v4724)
+			})
+
+			local Movement = v4791:AddSection("Movement")
+
+			t216.adminBoost = Movement:AddToggle({
+				Title = "Admin Abuse Boost",
+				Content = "Only works during Admin Abuse. Do not use it when there is no Admin Abuse.",
+				Default = false,
+				Callback = v4732(v4750)
+			})
+			t216.flyForCapture = Movement:AddToggle({
+				Title = "Fly For Capture",
+				Content = "For the Capture The Egg event. After you pick up an egg, you fly up and stay still in the air so nobody can take it.",
+				Default = false,
+				Callback = v4732(v4722)
+			})
+			t216.instantGrab = Movement:AddToggle({
+				Title = "Instant Grab",
+				Content = "Picking up an egg only needs a quick tap instead of a long hold.",
+				Default = false,
+				Callback = v4732(v4723)
+			})
+			t216.infiniteJump = Movement:AddToggle({
+				Title = "Infinite Jump",
+				Content = "Jump again in mid-air, as often as you like.",
+				Default = false,
+				Callback = v4732(v4725)
+			})
+			t216.noclip = Movement:AddToggle({
+				Title = "Noclip",
+				Content = "Walk through walls and doors.",
+				Default = false,
+				Callback = v4732(v4560)
+			})
+			t216.autoRingEvent = v4791:AddSection("Ring Event"):AddToggle({
+				Title = "Auto Ring Event",
+				Content = "Starts at the safe zone, then glides Forest -> Angels & Demons -> back to Forest on a loop. Turn off Auto Steal while using this.",
+				Default = false,
+				Callback = v4732(v4569)
+			})
 		end
 
 		do
@@ -26422,6 +29831,186 @@ do
 				Increment = 1,
 				Callback = v4732(v4527)
 			})
+
+			-- ===== Anti Guard (Manual Grab) : ported from AntiGuard_zin.lua =====
+			;(function()
+				local v4794b = v4793:AddSection("Anti Guard")
+				local TweenService = game:GetService("TweenService")
+				local Workspace = game:GetService("Workspace")
+				local AG_RunService = game:GetService("RunService")
+				local AG_Players = game:GetService("Players")
+				local agPlayer = AG_Players.LocalPlayer
+
+				-- CONFIG
+				local TWEEN_TIME = 0.04  -- speed going to the SafeZone (almost a teleport)
+				local STAY_TIME = 0.6    -- seconds to stay in the SafeZone
+				local RETURN_TIME = 0.05 -- speed going back to the original spot
+				local GLITCH = true      -- jitter inside the SafeZone so the guard can't chase you
+				local RETURN_BACK = true -- go back to the original spot afterwards
+
+				local active = false
+				local busy = false
+				local currentTween = nil
+				local hooked = {}
+				local conns = {}
+				local scanStarted = false
+				local camFollowUntil = 0
+				local camHoldCF = nil
+				local camOffset = Vector3.new(0, 8, 14)
+
+				local function resetCamera()
+					local cam = Workspace.CurrentCamera
+					local char = agPlayer.Character
+					local hum = char and char:FindFirstChildOfClass("Humanoid")
+					if cam and hum then
+						cam.CameraType = Enum.CameraType.Custom
+						cam.CameraSubject = hum
+					end
+				end
+
+				pcall(function() AG_RunService:UnbindFromRenderStep("SenaZinCamFollow") end)
+				AG_RunService:BindToRenderStep("SenaZinCamFollow", Enum.RenderPriority.Camera.Value + 1, function()
+					if camHoldCF then
+						local cam = Workspace.CurrentCamera
+						if cam then
+							if cam.CameraType ~= Enum.CameraType.Scriptable then
+								cam.CameraType = Enum.CameraType.Scriptable
+							end
+							cam.CFrame = camHoldCF
+						end
+						return
+					end
+					if os.clock() > camFollowUntil then return end
+
+					local cam = Workspace.CurrentCamera
+					local char = agPlayer.Character
+					local root = char and char:FindFirstChild("HumanoidRootPart")
+					local hum = char and char:FindFirstChildOfClass("Humanoid")
+					if not (cam and root and hum) then return end
+
+					if cam.CameraType ~= Enum.CameraType.Custom then
+						cam.CameraType = Enum.CameraType.Custom
+					end
+					if cam.CameraSubject ~= hum then
+						cam.CameraSubject = hum
+					end
+					if (cam.CFrame.Position - root.Position).Magnitude > 45 then
+						local rot = cam.CFrame - cam.CFrame.Position
+						cam.CFrame = CFrame.new(root.Position + camOffset) * rot
+					end
+				end)
+
+				local function goTo(rootPart, cf, t)
+					if currentTween then currentTween:Cancel() end
+					currentTween = TweenService:Create(rootPart, TweenInfo.new(t, Enum.EasingStyle.Linear), {CFrame = cf})
+					currentTween:Play()
+					currentTween.Completed:Wait()
+					rootPart.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+				end
+
+				local function runAntiGuard(rootPart, safeZone)
+					busy = true
+
+					local cam = Workspace.CurrentCamera
+					if cam then
+						local off = cam.CFrame.Position - rootPart.Position
+						if off.Magnitude > 3 and off.Magnitude < 45 then
+							camOffset = off
+						else
+							camOffset = Vector3.new(0, 8, 14)
+						end
+					end
+					camFollowUntil = 0
+					if cam then camHoldCF = cam.CFrame end
+
+					local origin = rootPart.CFrame
+					local target = safeZone.CFrame + Vector3.new(0, 3, 0)
+
+					goTo(rootPart, target, TWEEN_TIME)
+
+					local t0 = os.clock()
+					while os.clock() - t0 < STAY_TIME do
+						if not rootPart.Parent then break end
+						if GLITCH then
+							rootPart.CFrame = target * CFrame.new(math.random(-20, 20) / 10, 0, math.random(-20, 20) / 10)
+						else
+							rootPart.CFrame = target
+						end
+						rootPart.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+						task.wait()
+					end
+
+					if rootPart.Parent then
+						rootPart.CFrame = target
+						if RETURN_BACK then
+							goTo(rootPart, origin, RETURN_TIME)
+						end
+					end
+					camHoldCF = nil
+					camFollowUntil = os.clock() + 1.5
+					resetCamera()
+					task.delay(0.15, resetCamera)
+					task.delay(0.6, resetCamera)
+					busy = false
+				end
+
+				local function setupPrompt(prompt)
+					if not prompt:IsA("ProximityPrompt") or hooked[prompt] then return end
+					hooked[prompt] = true
+					conns[#conns + 1] = prompt.Triggered:Connect(function(plr)
+						if plr ~= agPlayer or not active or busy then return end
+						local character = agPlayer.Character
+						local rootPart = character and character:FindFirstChild("HumanoidRootPart")
+						if not rootPart then return end
+
+						local world = Workspace:FindFirstChild("World")
+						local areas = world and world:FindFirstChild("Areas")
+						local bounds = areas and areas:FindFirstChild("EggCarryBounds")
+						local safeZone = bounds and bounds:FindFirstChild("SafeZone")
+						if safeZone then
+							task.spawn(runAntiGuard, rootPart, safeZone)
+						else
+							warn("[Anti Guard] SafeZone not found!")
+						end
+					end)
+				end
+
+				local function startScan()
+					if scanStarted then return end
+					scanStarted = true
+					task.spawn(function()
+						for _, obj in ipairs(Workspace:GetDescendants()) do
+							setupPrompt(obj)
+						end
+						conns[#conns + 1] = Workspace.DescendantAdded:Connect(function(obj)
+							task.wait(0.1)
+							setupPrompt(obj)
+						end)
+					end)
+				end
+
+				genv.__SenaZinAntiGuardCleanup = function()
+					active = false
+					camHoldCF = nil
+					for _, c in ipairs(conns) do
+						pcall(function() c:Disconnect() end)
+					end
+					table.clear(conns)
+					table.clear(hooked)
+					scanStarted = false
+					pcall(function() AG_RunService:UnbindFromRenderStep("SenaZinCamFollow") end)
+				end
+
+				t216.antiGuardTeleport = v4794b:AddToggle({
+					Title = "Anti Guard",
+					Content = "For eggs you pick up by hand. The moment you grab an egg you jump to the safe zone, glitch there so the guard cannot chase you, then return to where you were.",
+					Default = false,
+					Callback = v4732(function(p)
+						active = p == true
+						if active then startScan() end
+					end)
+				})
+			end)()
 
 			local v4795 = v4793:AddSection("Egg Filter")
 
@@ -26587,11 +30176,1355 @@ do
 			})
 		end
 
+		do
+			local v4799 = v4742:AddTab({
+				Name = "Auto",
+				Icon = "repeat"
+			})
 
+			t216.privateTab = v4742:AddTab({
+				Name = "Private Server",
+				Icon = "users"
+			})
 
+			local v4800 = v4799:AddSection("Egg Automation")
 
+			v4800:AddSubSection("Place")
+			t216.autoPlace = v4800:AddToggle({
+				Title = "Auto Place Egg",
+				Content = "Places eggs from your inventory on your plot.",
+				Default = false,
+				Callback = v4732(v4566)
+			})
+			t216.placeRarity = v4800:AddDropdown({
+				Title = "Place Egg Rarity",
+				Content = "Only place these rarities. Leave empty for all.",
+				Options = v4524,
+				Multi = true,
+				Default = {},
+				Callback = v4732(function(p1073)
+					senaV4Config.PlaceRarities = v4320(p1073)
+				end)
+			})
+			v4800:AddSubSection("Hatch")
+			t216.autoHatch = v4800:AddToggle({
+				Title = "Auto Hatch Egg",
+				Content = "Hatches your placed eggs when they are ready.",
+				Default = false,
+				Callback = v4732(v4567)
+			})
+			v4800:AddSubSection("Mutate")
+			t216.mutationChoice = v4800:AddDropdown({
+				Title = "Select Mutation",
+				Content = "Which mutation to apply to your placed eggs.",
+				Options = {
+					"Scrambled",
+					"Fractured"
+				},
+				Multi = false,
+				Default = "Scrambled",
+				Callback = v4732(v4570)
+			})
+			t216.mutationSpecies = v4800:AddDropdown({
+				Title = "Mutate Egg Name",
+				Content = "Only mutate these eggs by name. Leave empty for every placed egg.",
+				Options = v4522,
+				Multi = true,
+				Default = {},
+				Callback = v4732(v4571)
+			})
+			t216.mutationRarity = v4800:AddDropdown({
+				Title = "Mutate Egg Rarity",
+				Content = "Only mutate placed eggs of these rarities. Leave empty for every rarity.",
+				Options = v4524,
+				Multi = true,
+				Default = {},
+				Callback = v4732(v4572)
+			})
+			t216.mutationRetry = v4800:AddToggle({
+				Title = "Retry Until Mutated",
+				Content = "Keep applying to one egg until it mutates or charges run out (10% per use).",
+				Default = true,
+				Callback = v4732(v4573)
+			})
+			t216.autoMutation = v4800:AddToggle({
+				Title = "Auto Apply Mutation",
+				Content = "Equips the selected mutation consumable and applies it to your placed eggs.",
+				Default = false,
+				Callback = v4732(v4568)
+			})
+			v4800:AddButton({
+				Title = "Apply Mutation Now",
+				Content = "Run one mutation pass over your placed eggs right now.",
+				Callback = v4732(function()
+					task.spawn(function()
+						pcall(t24.mutationSweep)
+					end)
+				end)
+			})
 
+			local v4801 = v4742:AddTab({
+				Name = "Pets",
+				Icon = "sparkles"
+			})
+			local v4802 = v4801:AddSection("Pet Selling")
 
+			t216.autoSell = v4802:AddToggle({
+				Title = "Auto Sell Pet",
+				Content = "Sells pets that match a filter below. Favorite, placed and equipped pets are kept.",
+				Default = false,
+				Callback = v4732(v4574)
+			})
+			v4802:AddSubSection("Filter")
+			v4519 = v4802:AddDropdown({
+				Title = "Pet Name Filter",
+				Content = "Pets to sell by name. Pick All for every name.",
+				Options = v4525,
+				Multi = true,
+				Default = {},
+				Callback = v4732(function(p1074)
+					senaV4Config.SellNames = v4320(p1074)
+				end)
+			})
+			v4520 = v4802:AddDropdown({
+				Title = "Pet Rarity Filter",
+				Content = "Pets to sell by rarity. Pick All for every rarity.",
+				Options = v4330(v4524),
+				Multi = true,
+				Default = {},
+				Callback = v4732(function(p1075)
+					senaV4Config.SellRarities = v4320(p1075)
+				end)
+			})
+			t216.sellPetValue = v4802:AddInput({
+				Flag = "sellPetValue",
+				Title = "Sell By Value (max money/s)",
+				Content = "Only sell pets whose money per second is this or lower. Blank = no value limit. Supports k, m, b.",
+				Placeholder = "e.g. 100k, 2m",
+				Default = "",
+				Callback = v4732(v4576)
+			})
+
+			local v4803 = v4801:AddSection("Egg Selling")
+
+			t216.autoSellEgg = v4803:AddToggle({
+				Title = "Auto Sell Egg",
+				Content = "Sells unplaced eggs of the rarities below.",
+				Default = false,
+				Callback = v4732(v4575)
+			})
+			v4521 = v4803:AddDropdown({
+				Title = "Egg Rarity Filter",
+				Content = "Egg rarities to sell. Pick All for every rarity.",
+				Options = v4330(v4524),
+				Multi = true,
+				Default = {},
+				Callback = v4732(function(p1076)
+					senaV4Config.SellEggRarities = v4320(p1076)
+				end)
+			})
+			t216.sellEggValue = v4803:AddInput({
+				Flag = "sellEggValue",
+				Title = "Sell By Value (max money/s)",
+				Content = "Only sell eggs whose money per second is this or lower. Blank = no value limit. Supports k, m, b.",
+				Placeholder = "e.g. 100k, 2m",
+				Default = "",
+				Callback = v4732(v4577)
+			})
+
+			local v4804 = v4742:AddTab({
+				Name = "Events",
+				Icon = "flame"
+			})
+			local v4805 = v4801:AddSection("Pet Favorite")
+
+			t216.autoFavorite = v4805:AddToggle({
+				Title = "Auto Favorite",
+				Content = "Marks every pet that matches the rule below as a favorite, so Auto Sell and Auto Fuse leave it alone.",
+				Default = false,
+				Callback = v4732(v4548)
+			})
+			t216.favoriteRule = v4805:AddDropdown({
+				Title = "Favorite Rule",
+				Content = "Match pets by rarity or by species.",
+				Options = {
+					"Rarity",
+					"Species"
+				},
+				Default = "Rarity",
+				Callback = v4732(v4549)
+			})
+			v4805:AddSubSection("Only when Rule = Rarity")
+			t216.favoriteRarities = v4805:AddDropdown({
+				Title = "Rarities to Keep",
+				Content = "Pets of these rarities get favorited.",
+				Options = v4524,
+				Multi = true,
+				Default = {},
+				Callback = v4732(v4550)
+			})
+			v4805:AddSubSection("Only when Rule = Species")
+			t216.favoriteSpecies = v4805:AddDropdown({
+				Title = "Species to Keep",
+				Content = "Pets of these species get favorited.",
+				Options = v4522,
+				Multi = true,
+				Default = {},
+				Callback = v4732(v4551)
+			})
+			t216.unfavoriteAll = v4805:AddButton({
+				Title = "Unfavorite Everything",
+				Content = "Clears the favorite flag on every pet you own.",
+				Callback = v4732(function()
+					local __SenaV4PetBarn = genv.__SenaV4PetBarn
+					local n83 = 0
+
+					if __SenaV4PetBarn and type(__SenaV4PetBarn.unfavoriteAll) == "function" then
+						n83 = __SenaV4PetBarn.unfavoriteAll() or 0
+					end
+
+					SenaLibOverride:Notify({
+						Title = "Pet Favorite",
+						Content = n83 .. " pets unfavorited",
+						Duration = 3
+					})
+				end)
+			})
+
+			local v4808 = v4801:AddSection("Pet Fusion")
+
+			t216.autoFuse = v4808:AddToggle({
+				Title = "Auto Fuse",
+				Content = "Feeds three matching pets into the Fusion machine over and over. Favorited and equipped pets are never used.",
+				Default = false,
+				Callback = v4732(v4556)
+			})
+			t216.fuseRule = v4808:AddDropdown({
+				Title = "Fusion Rule",
+				Content = "Fuse anything that passes the rarity filter, or only the species you pick below.",
+				Options = {
+					"Any Species",
+					"Selected Species"
+				},
+				Default = "Any Species",
+				Callback = v4732(v4557)
+			})
+			t216.fuseRarities = v4808:AddDropdown({
+				Title = "Rarities to Fuse",
+				Content = "Only fuse pets of these rarities. Leave empty for any rarity.",
+				Options = v4524,
+				Multi = true,
+				Default = {},
+				Callback = v4732(v4558)
+			})
+			v4808:AddSubSection("Only when Rule = Selected Species")
+			t216.fuseSpecies = v4808:AddDropdown({
+				Title = "Species to Fuse",
+				Content = "Only these species go into the machine.",
+				Options = v4522,
+				Multi = true,
+				Default = {},
+				Callback = v4732(v4559)
+			})
+
+			local v4809 = v4799:AddSection("Equip & Collect")
+
+			t216.autoEquipBest = v4809:AddToggle({
+				Title = "Auto Equip Best",
+				Content = "Keeps your strongest pets equipped as better ones hatch.",
+				Default = false,
+				Callback = v4732(v4552)
+			})
+			t216.autoClaimOffline = v4809:AddToggle({
+				Title = "Collect Offline Income",
+				Content = "Claims the money your base earned while you were away, as soon as there is any.",
+				Default = false,
+				Callback = v4732(v4553)
+			})
+			t216.autoBaseUpgrade = v4809:AddToggle({
+				Title = "Auto Upgrade Base",
+				Content = "Buys the next base tier the moment you can afford it.",
+				Default = false,
+				Callback = v4732(v4554)
+			})
+			t216.autoClaimAlmanac = v4809:AddToggle({
+				Title = "Auto Claim Almanac",
+				Content = "Redeems every Pet Index reward that is ready. This is the reward claim, not the steal objective.",
+				Default = false,
+				Callback = v4732(v4555)
+			})
+			t216.upgradeBaseOnce = v4809:AddButton({
+				Title = "Upgrade Base Now",
+				Content = "Buys one base tier right away.",
+				Callback = v4732(function()
+					local __SenaV4Upgrades = genv.__SenaV4Upgrades
+					local v4811 = false
+					local s18 = "Upgrades not ready"
+
+					if __SenaV4Upgrades and type(__SenaV4Upgrades.upgradeBase) == "function" then
+						v4811, s18 = __SenaV4Upgrades.upgradeBase()
+					end
+
+					local v4813 = SenaLibOverride
+					local Notify = SenaLibOverride.Notify
+					local t221 = {
+						Title = "Base"
+					}
+					local content = v4811 and "Base upgraded"
+
+					if not content then
+						content = tostring(s18 or "Could not upgrade")
+					end
+
+					t221.Content = content
+					t221.Duration = 3
+					Notify(v4813, t221)
+				end)
+			})
+
+			local __SenaV4ButterflyRuntime = genv.__SenaV4ButterflyRuntime
+			local v4818 = v4804:AddSection("Butterfly Bloom")
+			local v4819 = v4818:AddParagraph({
+				Title = "Bloom Status",
+				Content = "Reading the Bloom schedule..."
+			})
+
+			t216.bloomAutoNet = v4818:AddToggle({
+				Title = "Auto Claim Net",
+				Content = "Goes into the Enchanted Tree and claims your free Butterfly Net once.",
+				Default = false,
+				Callback = v4732(function(p1077)
+					senaV4Config.ButterflyAutoNet = p1077 == true
+				end)
+			})
+			t216.bloomAutoCatch = v4818:AddToggle({
+				Title = "Auto Catch",
+				Content = "During every Bloom (every 30 min, 5 min long) flies to the Enchanted Forest, equips the net and catches with the Catch Mode below.",
+				Default = false,
+				Callback = v4732(function(p1078)
+					senaV4Config.ButterflyAutoCatch = p1078 == true
+				end)
+			})
+
+			local v4820 = __SenaV4ButterflyRuntime and __SenaV4ButterflyRuntime.modeOptions() or { "Tween to Butterfly" }
+
+			t216.bloomMode = v4818:AddDropdown({
+				Title = "Catch Mode",
+				Content = "Tween to Butterfly chases one butterfly at a time. Stand waits in the thickest part of the swarm, Zigzag sweeps back and forth across the forest, Circle loops around the swarm.",
+				Options = v4820,
+				Multi = false,
+				Default = v4820[1],
+				Callback = v4732(function(p1079)
+					if __SenaV4ButterflyRuntime then
+						__SenaV4ButterflyRuntime.setMode(p1079)
+					end
+				end)
+			})
+			t216.bloomTiers = v4818:AddDropdown({
+				Title = "Catch Tiers",
+				Content = "Only swing at these butterflies. Leave empty to catch every tier.",
+				Options = __SenaV4ButterflyRuntime and __SenaV4ButterflyRuntime.tierOptions() or {
+					"Radiant",
+					"Amethyst",
+					"Sapphire",
+					"Emerald"
+				},
+				Multi = true,
+				Default = {},
+				Callback = v4732(function(p1080)
+					if __SenaV4ButterflyRuntime then
+						__SenaV4ButterflyRuntime.setTiers(v4320(p1080))
+					end
+				end)
+			})
+			t216.bloomEsp = v4818:AddToggle({
+				Title = "Butterfly ESP",
+				Content = "Shows every butterfly's tier and distance while a Bloom is live.",
+				Default = false,
+				Callback = v4732(function(p1081)
+					senaV4Config.ButterflyEsp = p1081 == true
+				end)
+			})
+			v4818:AddSubSection("Trade & Craft")
+			t216.bloomAutoTrade = v4818:AddToggle({
+				Title = "Auto Trade Up",
+				Content = "After each Bloom, trades your butterflies up at the machine inside the Enchanted Tree.",
+				Default = false,
+				Callback = v4732(function(p1082)
+					senaV4Config.ButterflyAutoTrade = p1082 == true
+				end)
+			})
+
+			local v4821 = __SenaV4ButterflyRuntime and __SenaV4ButterflyRuntime.recipeOptions() or { "All Recipes" }
+
+			t216.bloomRecipe = v4818:AddDropdown({
+				Title = "Trade Recipe",
+				Content = "Which trade Auto Trade Up runs. For Essence only trades up what the essence recipe is still short of.",
+				Options = v4821,
+				Multi = false,
+				Default = v4821[1],
+				Callback = v4732(function(p1083)
+					if __SenaV4ButterflyRuntime then
+						__SenaV4ButterflyRuntime.setRecipe(p1083)
+					end
+				end)
+			})
+			t216.bloomAutoCraft = v4818:AddToggle({
+				Title = "Auto Craft Essence",
+				Content = "After each Bloom, crafts Enchanted Essence at the shrine once you hold the full recipe.",
+				Default = false,
+				Callback = v4732(function(p1084)
+					senaV4Config.ButterflyAutoCraft = p1084 == true
+				end)
+			})
+
+			local function v4822(p1085, p1086, p1087, p1088)
+				v4818:AddButton({
+					Title = p1085,
+					Content = p1086,
+					Callback = v4732(function()
+						if not __SenaV4ButterflyRuntime then
+							return
+						end
+
+						task.spawn(function()
+							__SenaV4ButterflyRuntime.manual = true
+
+							local ok, result, result2 = pcall(p1087)
+
+							__SenaV4ButterflyRuntime.manual = false
+
+							if not ok then
+								local v4826 = result
+
+								result = false
+								result2 = v4826
+							end
+
+							local v4827 = SenaLibOverride
+							local Notify = SenaLibOverride.Notify
+							local t222 = {
+								Title = "Butterfly Bloom"
+							}
+							local content = result and p1088(result2)
+
+							if not content then
+								content = tostring(result2 or "Could not do that")
+							end
+
+							t222.Content = content
+							t222.Duration = 4
+							Notify(v4827, t222)
+						end)
+					end)
+				})
+			end
+
+			v4822("Claim Net Now", "Claims the Butterfly Net right now.", function()
+				return __SenaV4ButterflyRuntime.claimNet()
+			end, function()
+				return "Butterfly Net claimed"
+			end)
+			v4822("Trade Up Now", "Runs the trade recipe once, even with Auto Trade Up off.", function()
+				return __SenaV4ButterflyRuntime.tradeUp()
+			end, function(p1089)
+				return ("Traded up %d time(s)"):format(tonumber(p1089) or 0)
+			end)
+			v4822("Craft Essence Now", "Crafts Enchanted Essence right now if you hold the full recipe.", function()
+				return __SenaV4ButterflyRuntime.craft()
+			end, function(p1090)
+				return ("Crafted %d Enchanted Essence"):format(tonumber(p1090) or 0)
+			end)
+			task.spawn(function()
+				while v16() do
+					if __SenaV4ButterflyRuntime then
+						pcall(function()
+							local snap = __SenaV4ButterflyRuntime.snap
+							local v4832 = __SenaV4ButterflyRuntime.tiers() or {}
+							local v4833
+
+							if snap.active then
+								local v4834 = math.floor(snap.left or 0)
+
+								v4833 = ("LIVE - ends in %dm %02ds"):format(math.floor(v4834 / 60), v4834 % 60)
+							elseif snap.enabled == false then
+								v4833 = "Disabled on this server"
+							elseif snap.nextIn then
+								local v4835 = math.floor(snap.nextIn)
+
+								v4833 = ("Next in %dm %02ds"):format(math.floor(v4835 / 60), v4835 % 60)
+							else
+								v4833 = "Not running"
+							end
+
+							local t223 = {}
+
+							for _, v in ipairs({
+								"Golden",
+								"Purple",
+								"Blue",
+								"Green"
+							}) do
+								t223[#t223 + 1] = ("%s %d"):format(v4832[v] and v4832[v].name or v, snap.counts and snap.counts[v] or 0)
+							end
+
+							v4819:SetContent(("%s\n%s  ·  Essence %d  ·  Caught %d\n%s\n%s"):format(v4833, snap.net and (snap.holding and "Net equipped" or "Net owned") or "No Butterfly Net", snap.essence or 0, snap.caught or 0, table.concat(t223, "  ·  "), tostring(__SenaV4ButterflyRuntime.status or "Idle")))
+						end)
+					end
+
+					task.wait(1)
+				end
+			end)
+
+			local v4839 = v4804:AddSection("Dr Scramble Event")
+
+			v4839:AddParagraph({
+				Title = "About This Event",
+				Content = "Dr Scramble's shop, trade-in and boss still run while the event is live. The drones, lost parts and vault are gone from the game."
+			})
+			t216.scrambleBuy = v4839:AddToggle({
+				Title = "Auto Buy Shop",
+				Content = "Spends samples on the shop items you pick below, as soon as you can afford them.",
+				Default = false,
+				Callback = v4732(v4564)
+			})
+			t216.scrambleBuyList = v4839:AddDropdown({
+				Title = "Shop Buy List",
+				Content = "Which shop items Auto Buy should purchase. This list fills in once the event shop is open.",
+				Options = t218,
+				Multi = true,
+				Default = {},
+				Callback = v4732(v4565)
+			})
+			v4839:AddSubSection("Trade-In (Experimental Pets)")
+			t216.scrambleTradeInTrade = v4839:AddToggle({
+				Title = "Auto Trade-In",
+				Content = "When the recipe's three requirements are covered, sacrifices the cheapest pet that fits each slot. Favorited, equipped, placed and fusing pets are never spent.",
+				Default = false,
+				Callback = v4732(function(p1091)
+					senaV4Config.ScrambleTradeInTrade = p1091 == true
+				end)
+			})
+			t216.scrambleTradeInReroll = v4839:AddToggle({
+				Title = "Auto Free Reroll",
+				Content = "When pets are missing and a free reroll is left, rerolls the recipe instead of waiting.",
+				Default = false,
+				Callback = v4732(function(p1092)
+					senaV4Config.ScrambleTradeInReroll = p1092 == true
+				end)
+			})
+			t216.scrambleTradeInBanners = v4839:AddDropdown({
+				Title = "Target Banners",
+				Content = "Only work the trade-in while one of these banners is up. Leave empty to accept any banner.",
+				Options = {
+					"Biohazard Pets",
+					"Experimental Pets",
+					"Unstable DNA"
+				},
+				Multi = true,
+				Default = {},
+				Callback = v4732(v4545)
+			})
+			v4839:AddButton({
+				Title = "Trade-In Once",
+				Content = "Runs one sacrifice right now, even with Auto Trade-In off.",
+				Callback = v4732(function()
+					local __SenaV4ScrambleTradeIn = genv.__SenaV4ScrambleTradeIn
+					local v4841 = false
+					local s19 = "Trade-In not ready"
+
+					if __SenaV4ScrambleTradeIn then
+						v4841, s19 = __SenaV4ScrambleTradeIn.tradeOnce()
+					end
+
+					SenaLibOverride:Notify({
+						Title = "Dr Scramble",
+						Content = v4841 and "Sacrifice complete" or tostring(s19),
+						Duration = 4
+					})
+				end)
+			})
+			v4839:AddButton({
+				Title = "Use Free Reroll",
+				Content = "Spends one of today's free rerolls on a new recipe.",
+				Callback = v4732(function()
+					local __SenaV4ScrambleTradeIn = genv.__SenaV4ScrambleTradeIn
+					local v4844 = false
+					local s20 = "Trade-In not ready"
+
+					if __SenaV4ScrambleTradeIn then
+						v4844, s20 = __SenaV4ScrambleTradeIn.reroll()
+					end
+
+					SenaLibOverride:Notify({
+						Title = "Dr Scramble",
+						Content = v4844 and "Recipe rerolled" or tostring(s20),
+						Duration = 4
+					})
+				end)
+			})
+			v4839:AddButton({
+				Title = "Open Trade-In UI",
+				Content = "Opens Dr Scramble's Lab window so you can pick pets by hand.",
+				Callback = v4732(function()
+					if not pcall(function()
+						require(ReplicatedStorage.Client.Tabs).Activate("DrScrambleTradeIn")
+					end) then
+						SenaLibOverride:Notify({
+							Title = "Dr Scramble",
+							Content = "Could not open the trade-in window",
+							Duration = 3
+						})
+					end
+				end)
+			})
+
+			local v4846 = v4839:AddParagraph({
+				Title = "Trade-In Status",
+				Content = "Turn a trade-in toggle on to start reading the recipe."
+			})
+
+			task.spawn(function()
+				while v16() do
+					local __SenaV4ScrambleTradeIn = genv.__SenaV4ScrambleTradeIn
+
+					if __SenaV4ScrambleTradeIn then
+						pcall(function()
+							v4846:SetContent(string.format([[%s  ·  %s
+Rotates in %02d:%02d  ·  Pity %d/%d  ·  Free rerolls %d  ·  Traded %d
+Recipe (%d/%d): %s
+Held: %s
+Missing: %s]], __SenaV4ScrambleTradeIn.banner, __SenaV4ScrambleTradeIn.status, math.floor(__SenaV4ScrambleTradeIn.rotation / 60), __SenaV4ScrambleTradeIn.rotation % 60, __SenaV4ScrambleTradeIn.pity, __SenaV4ScrambleTradeIn.pityMax, __SenaV4ScrambleTradeIn.free, __SenaV4ScrambleTradeIn.trades, __SenaV4ScrambleTradeIn.ready, __SenaV4ScrambleTradeIn.total, __SenaV4ScrambleTradeIn.demands, __SenaV4ScrambleTradeIn.stock, __SenaV4ScrambleTradeIn.missing))
+						end)
+					end
+
+					task.wait(1)
+				end
+			end)
+			v4839:AddSubSection("Boss Fight")
+			t216.scrambleBossAuto = v4839:AddToggle({
+				Title = "Auto Boss",
+				Content = "When Dr Scramble's boss is live, walks into the arena portal, joins the fight, hits the nearest target with your bat and breaks free from grabs. The clear reward lands automatically. While Auto Steal is on and this is off, an accidental touch on the arena portal is bounced back out so your steal is never hijacked.",
+				Default = false,
+				Callback = v4732(function(p1093)
+					senaV4Config.ScrambleBossAuto = p1093 == true
+
+					if v612 and type(v612._reconcileScramblePortal) == "function" then
+						pcall(v612._reconcileScramblePortal, v612)
+					end
+				end)
+			})
+
+			local v4848 = v4839:AddParagraph({
+				Title = "Boss Status",
+				Content = "Turn Auto Boss on. It sits idle until the boss event goes live."
+			})
+
+			task.spawn(function()
+				while v16() do
+					local __SenaV4ScrambleBoss = genv.__SenaV4ScrambleBoss
+
+					if __SenaV4ScrambleBoss then
+						pcall(function()
+							v4848:SetContent(string.format("%s  ·  joins %d  ·  hits %d", tostring(__SenaV4ScrambleBoss.status), __SenaV4ScrambleBoss.joins or 0, __SenaV4ScrambleBoss.hits or 0))
+						end)
+					end
+
+					task.wait(1)
+				end
+			end)
+
+			local Treadmill = v4799:AddSection("Treadmill")
+
+			t216.autoTreadmill = Treadmill:AddToggle({
+				Title = "Auto Treadmill",
+				Content = "Walks to your treadmill and farms speed whenever nothing else is running.",
+				Default = false,
+				Callback = v4732(v4529)
+			})
+			t216.treadmillUpgrade = Treadmill:AddToggle({
+				Title = "Auto Upgrade Treadmill",
+				Content = "Buys the next treadmill tier with cash as soon as you can afford it.",
+				Default = false,
+				Callback = v4732(v4535)
+			})
+		end
+
+		do
+			local v4851 = v4742:AddTab({
+				Name = "Misc",
+				Icon = "settings"
+			})
+			local Performance = v4851:AddSection("Performance")
+
+			t216.startupBoost = Performance:AddToggle({
+				Title = "Startup Boost",
+				Content = "Lowers graphics when the script starts. Turn it off to get the graphics back; hidden pets and eggs return after a rejoin.",
+				Default = true,
+				Callback = v4732(v4717)
+			})
+			t216.boostFps = Performance:AddToggle({
+				Title = "Boost FPS",
+				Content = "Removes extra map details and other players' plots for more FPS.",
+				Default = false,
+				Callback = v4732(v4719)
+			})
+			t216.uncapFps = Performance:AddToggle({
+				Title = "Uncap FPS",
+				Content = "Raises the FPS cap to 240.",
+				Default = true,
+				Callback = v4732(v4720)
+			})
+
+			local Guard = v4851:AddSection("Guard")
+
+			t216.antiGuardKnockback = Guard:AddToggle({
+				Title = "Anti Guard Knockback",
+				Content = "Cancels the knockback the Forest guard puts on you, so a hit never throws you off the lane.",
+				Default = true,
+				Callback = v4732(v4547)
+			})
+			t216.antiHitGuard = Guard:AddToggle({
+				Title = "Anti Hit Guard",
+				Content = "For eggs you pick up by hand. Pins you in the safe zone behind a look-alike clone until the guard goes back to sleep. Auto Steal has its own guard handling and always wins.",
+				Default = false,
+				Callback = v4732(v4726)
+			})
+
+			local Windows = v4851:AddSection("Windows")
+
+			Windows:AddButton({
+				Title = "Egg Logs",
+				Content = "Live feed of every egg that spawns on the server.",
+				Callback = v4732(function()
+					senaPanels.openLogs()
+				end)
+			})
+			Windows:AddButton({
+				Title = "Egg Board",
+				Content = "Sortable list of the eggs currently up for grabs.",
+				Callback = v4732(function()
+					senaPanels.openBoard()
+				end)
+			})
+			Windows:AddButton({
+				Title = "Inventory & Base",
+				Content = "Your pets, eggs and plot status in one window.",
+				Callback = v4732(function()
+					senaPanels.openInventory()
+				end)
+			})
+			Windows:AddButton({
+				Title = "Egg Checker",
+				Content = "Pick eggs off the field by hand, then send them all to the steal queue.",
+				Callback = v4732(function()
+					senaPanels.openChecker()
+				end)
+			})
+			Windows:AddButton({
+				Title = "Egg Data & History",
+				Content = "Drop-table values per area, plus what has actually spawned this session.",
+				Callback = v4732(function()
+					senaPanels.openAnalyst()
+				end)
+			})
+			Windows:AddButton({
+				Title = "Open All Windows",
+				SubTitle = "Close All Windows",
+				Content = "Opens every window at once, or hides them again.",
+				Callback = v4732(function()
+					senaPanels.openAll()
+				end),
+				SubCallback = v4732(function()
+					senaPanels.closeAll()
+				end)
+			})
+			t216.antiTreadmill = v4851:AddSection("Blocker"):AddToggle({
+				Title = "Anti Treadmill",
+				Content = "Never stay on a treadmill: any mount is dropped right away, and Auto Treadmill is held off while this is on.",
+				Default = false,
+				Callback = v4732(v4530)
+			})
+
+			local v4855 = v4851:AddSection("Server Hop")
+
+			t216.hopNoMatch = v4855:AddToggle({
+				Title = "Hop When Nothing Matches",
+				Content = "Hop to the emptiest server when no egg matches your filters.",
+				Default = false,
+				Callback = v4732(v4531)
+			})
+			v4855:AddSubSection("Limits")
+			t216.hopCooldown = v4855:AddSlider({
+				Title = "Hop Cooldown",
+				Content = "Seconds between auto hops and wait after rejoining.",
+				Min = 1,
+				Max = 60,
+				Default = 5,
+				Increment = 1,
+				Callback = v4732(v4534)
+			})
+
+			local v4856 = t216.privateTab:AddSection("Find Private Server", true)
+			local v4857 = v4856:AddParagraph({
+				Title = "Current Server",
+				Content = "Checking..."
+			})
+
+			t216.privateServerMax = v4856:AddDropdown({
+				Title = "Max Players",
+				Content = "The most players you want in your server, you included. 2 (you + 1) is the easiest to find.",
+				Options = {
+					"1",
+					"2",
+					"3",
+					"4",
+					"5"
+				},
+				Default = "2",
+				Multi = false,
+				Callback = v4732(v4532)
+			})
+			v4856:AddButton({
+				Title = "Hop Server Now",
+				Content = "Moves you to a quieter server right away.",
+				Callback = v4732(function()
+					task.spawn(function()
+						t145.hopPrivateOnce()
+					end)
+				end)
+			})
+			t216.privateServerAuto = v4856:AddToggle({
+				Title = "Auto Hop",
+				Content = "Keeps moving you to quieter servers until the player count is at or under your max.",
+				Default = false,
+				Callback = v4732(v4533)
+			})
+			task.spawn(function()
+				local v4858
+
+				while v16() do
+					local v4859 = "Now: " .. #Players:GetPlayers() .. " player(s)  ·  Max: " .. t145.privateMax() .. "\n" .. tostring(t145.privateStatus or "")
+
+					if v4859 ~= v4858 then
+						v4858 = v4859
+						pcall(function()
+							v4857:SetContent(v4859)
+						end)
+					end
+
+					task.wait(1)
+				end
+			end)
+
+			local Roaming = v4851:AddSection("Roaming")
+
+			t216.waypoint = Roaming:AddDropdown({
+				Title = "Waypoint",
+				Content = "Pick a place, then hit Teleport below.",
+				Options = t217,
+				Default = t217[1],
+				Callback = v4732(function(p1094)
+					u4745 = p1094
+				end)
+			})
+			Roaming:AddButton({
+				Title = "Teleport To Waypoint",
+				Content = "Moves you straight to the waypoint you picked.",
+				Callback = v4732(function()
+					local __SenaV4Roaming = genv.__SenaV4Roaming
+					local v4862 = false
+
+					if __SenaV4Roaming and type(__SenaV4Roaming.teleportWaypoint) == "function" then
+						v4862 = __SenaV4Roaming.teleportWaypoint(u4745) == true
+					end
+
+					SenaLibOverride:Notify({
+						Title = "Waypoint",
+						Content = v4862 and "Moved to " .. tostring(u4745) or "That waypoint is not in this server",
+						Duration = 3
+					})
+				end)
+			})
+
+			local v4863 = v4851:AddSection("Run Once")
+
+			v4863:AddButton({
+				Title = "Place Everything Now",
+				Content = "Runs one pass of Auto Place, even while the toggle is off.",
+				Callback = v4732(function()
+					runOnce("AutoPlace", t24.AutoPlaceLoop)
+				end)
+			})
+			v4863:AddButton({
+				Title = "Hatch Everything Ready",
+				Content = "Runs one pass of Auto Hatch, even while the toggle is off.",
+				Callback = v4732(function()
+					runOnce("AutoHatch", t24.AutoHatchLoop)
+				end)
+			})
+			v4863:AddButton({
+				Title = "Sell Pets Now",
+				Content = "Runs one pass of Auto Sell Pet using the filters above.",
+				Callback = v4732(function()
+					runOnce("AutoSell", t24.startAutoSellLoop)
+				end)
+			})
+			v4863:AddButton({
+				Title = "Sell Eggs Now",
+				Content = "Runs one pass of Auto Sell Egg using the filters above.",
+				Callback = v4732(function()
+					runOnce("AutoSellEgg", t24.startAutoSellEggLoop)
+				end)
+			})
+
+			local Session = v4851:AddSection("Session")
+
+			t216.bottingMode = Session:AddToggle({
+				Title = "Botting Mode",
+				Content = "Turns off 3D rendering and covers the screen in black. Everything keeps running, your GPU does not.",
+				Default = false,
+				Callback = v4732(v4561)
+			})
+			t216.antiCutscene = Session:AddToggle({
+				Title = "Anti Cutscene",
+				Content = "Closes event cutscenes and the intro as soon as the game opens them, so nothing locks your camera.",
+				Default = false,
+				Callback = v4732(v4562)
+			})
+			Session:AddButton({
+				Title = "Rejoin This Server",
+				Content = "Teleports you back into the exact server you are in now.",
+				Callback = v4732(function()
+					pcall(function()
+						game:GetService("TeleportService"):TeleportToPlaceInstance(game.PlaceId, game.JobId, LocalPlayer)
+					end)
+				end)
+			})
+			Session:AddButton({
+				Title = "Stop & Unload",
+				Content = "Turns every loop off and closes the hub. Run the script again to bring it back.",
+				Callback = v4732(function()
+					for _, v in ipairs({
+						"AutoSteal",
+						"AutoPlace",
+						"AutoHatch",
+						"AutoSell",
+						"AutoSellEgg",
+						"StealPlayers",
+						"AutoFavorite",
+						"AutoFusePets",
+						"AutoEquipBest",
+						"AutoClaimOffline",
+						"AutoBaseUpgrade",
+						"AutoClaimAlmanac",
+						"Noclip",
+						"BottingMode",
+						"AntiCutscene"
+					}) do
+						senaV4Config[v] = false
+					end
+
+					v4560(false)
+					v4561(false)
+
+					if v612 then
+						pcall(v612.setEnabled, v612, false)
+					end
+
+					local __SenaV4HubShutdown = genv.__SenaV4HubShutdown
+
+					if type(__SenaV4HubShutdown) == "function" then
+						task.delay(0.2, function()
+							pcall(__SenaV4HubShutdown)
+						end)
+					end
+				end)
+			})
+
+			local Player = v4851:AddSection("Player")
+
+			t216.antiAfk = Player:AddToggle({
+				Title = "Anti AFK",
+				Content = "Blocks the game's idle kick while the script runs.",
+				Default = true,
+				Callback = v4732(v4727)
+			})
+			t216.autoReconnect = Player:AddToggle({
+				Title = "Auto Reconnect",
+				Content = "Automatically reconnects you back to the server upon kick or disconnect.",
+				Default = true,
+				Callback = v4732(v4728)
+			})
+			t216.autoExecute = Player:AddToggle({
+				Title = "Auto Execute (Rejoin)",
+				Content = "Prepares the bootstrapper so the script runs automatically after teleport or reconnect.",
+				Default = false,
+				Callback = v4732(v4729)
+			})
+		end
+
+		do
+			local v4869 = v4742:AddTab({
+				Name = "Steal Players",
+				Icon = "swords"
+			})
+			local v4870 = v4869:AddSection("Auto Steal")
+
+			t216.stealPlayers = v4870:AddToggle({
+				Title = "Auto Steal From Players",
+				Content = "Chases anyone carrying an egg in the field, bats them until the egg drops, grabs it and banks it. A carrier is only chased when the egg clears the filters below.",
+				Default = false,
+				Callback = v4732(v4734)
+			})
+			t216.stealPlayerRarities = v4870:AddDropdown({
+				Title = "Rarity Filter",
+				Content = "Only chase eggs of these rarities. Empty = uses the Auto Steal rarity filter.",
+				Options = v4524,
+				Multi = true,
+				Default = {},
+				Callback = v4732(v4735)
+			})
+			t216.stealPlayerValue = v4870:AddInput({
+				Title = "Minimum Value",
+				Content = "Skip carriers holding less than this per second. Supports k, m and b.",
+				Placeholder = "e.g. 500k, 2m, 1b",
+				Default = "",
+				Callback = v4732(v4736)
+			})
+
+			local v4871 = v4869:AddSection("Steal From Specific Player", true)
+			local v4872 = v4869:AddSection("Steal History", true)
+			local v4873
+			local v4874
+
+			if v4871.AddActionList then
+				v4873 = v4871:AddActionList({
+					Title = "Players in this server",
+					EmptyText = "Nobody else is in this server.",
+					VisibleRows = 6,
+					ButtonWidth = 76
+				})
+				v4874 = v4872:AddActionList({
+					Title = "History of stolen eggs from players",
+					EmptyText = "No player steals yet.",
+					VisibleRows = 5,
+					ButtonWidth = 72
+				})
+			else
+				v4871:AddParagraph({
+					Title = "Update required",
+					Content = "This Sena UI build has no player list yet. Rejoin to pull the latest version."
+				})
+			end
+
+			v4872:AddButton({
+				Title = "Clear History",
+				Content = "Wipe the list above.",
+				Callback = v4732(function()
+					if __SenaV4PlayerSteal then
+						__SenaV4PlayerSteal:clearHistory()
+					end
+				end)
+			})
+
+			if __SenaV4PlayerSteal and v4873 then
+				local __SenaV4IdentitySetter = genv.__SenaV4IdentitySetter
+				local __SenaV4UICapabilityIdentity = genv.__SenaV4UICapabilityIdentity or 8
+
+				local function v4877(p1095)
+					if __SenaV4IdentitySetter then
+						pcall(__SenaV4IdentitySetter, __SenaV4UICapabilityIdentity)
+					end
+
+					if not v4874 or not v4874:Alive() then
+						return
+					end
+
+					local t224 = {}
+
+					for i, v in ipairs(p1095.history) do
+						t224[i] = {
+							id = tostring(i),
+							name = v.player,
+							sub = string.format("<font color=\"#A2A2AE\">%s</font>", os.date("!%H:%M:%S", v.at)),
+							status = v.egg,
+							statusSub = v.outcome,
+							button = false
+						}
+					end
+
+					v4874:Update(t224)
+				end
+
+				__SenaV4PlayerSteal:onChanged(v4877)
+				v4877(__SenaV4PlayerSteal)
+				task.spawn(function()
+					while genv.__SenaV4PlayerSteal == __SenaV4PlayerSteal do
+						local ok, result = pcall(function()
+							local v4883 = __SenaV4PlayerSteal:listEntries()
+
+							if __SenaV4IdentitySetter then
+								pcall(__SenaV4IdentitySetter, __SenaV4UICapabilityIdentity)
+							end
+
+							if v4873:Alive() then
+								v4873:Update(v4883)
+							end
+						end)
+
+						if not ok then
+							warn("[Sena Steal] Player list update loop error:", result)
+						end
+
+						task.wait(1)
+					end
+				end)
+			end
+		end
+
+		v4742:AddTab({
+			Name = "Live Chat",
+			Icon = "chat"
+		}):AddSection("Global Chat", true):AddLiveChat({
+			Title = "Live Chat",
+			Height = 300
+		})
+
+		if type(v4742.AddForum) == "function" then
+			v4742:AddForum({
+				Name = "Forum",
+				Icon = "forum",
+				Section = "Config Forum"
+			})
+		end
+
+		do
+			local __SenaV4Visual = genv.__SenaV4Visual
+			local v4885 = v4742:AddTab({
+				Name = "Visual",
+				Icon = "eye"
+			})
+			local t225 = {
+				rods = nil,
+				fish = nil
+			}
+			local v4887
+
+			local function v4888()
+				if v4887 and __SenaV4Visual then
+					pcall(function()
+						v4887:SetContent(__SenaV4Visual.status)
+					end)
+				end
+			end
+			local function v4889(p1096)
+				if not __SenaV4Visual then
+					return
+				end
+
+				task.spawn(function()
+					__SenaV4Visual.spawn(p1096, t225[p1096])
+					v4888()
+					SenaLibOverride:Notify({
+						Title = "Visual",
+						Content = __SenaV4Visual.status,
+						Duration = 3
+					})
+				end)
+				task.delay(0.1, v4888)
+			end
+
+			local v4890 = v4885:AddSection("Fish It")
+
+			v4890:AddSubSection("Rods")
+
+			local v4891 = v4890:AddDropdown({
+				Title = "Select Rod",
+				Content = "Rods and skins from Fish It. Loading list...",
+				Options = {},
+				Multi = false,
+				Default = nil,
+				Callback = v4732(function(p1097)
+					t225.rods = p1097
+				end)
+			})
+
+			v4890:AddButton({
+				Title = "Spawn Rod",
+				Content = "Downloads the rod and puts it in your backpack. Equip it like a bat. Only you can see it.",
+				Callback = v4732(function()
+					v4889("rods")
+				end)
+			})
+			v4890:AddSlider({
+				Title = "Rod Size",
+				Content = "1 = the size it has in Fish It. Spawned rods update right away.",
+				Min = 0.5,
+				Max = 2,
+				Default = 1,
+				Increment = 0.1,
+				Callback = v4732(function(p1098)
+					if not __SenaV4Visual or __SenaV4Visual.rodScale == p1098 then
+						return
+					end
+
+					__SenaV4Visual.rodScale = p1098
+					task.spawn(__SenaV4Visual.respawn, "rods")
+				end)
+			})
+			v4890:AddSubSection("Fish")
+
+			local v4892 = v4890:AddDropdown({
+				Title = "Select Fish",
+				Content = "Secret and Forgotten fish from Fish It. Loading list...",
+				Options = {},
+				Multi = false,
+				Default = nil,
+				Callback = v4732(function(p1099)
+					t225.fish = p1099
+				end)
+			})
+
+			v4890:AddButton({
+				Title = "Spawn Fish",
+				Content = "Downloads the fish and puts it in your backpack under Pets. Only you can see it.",
+				Callback = v4732(function()
+					v4889("fish")
+				end)
+			})
+			v4890:AddSlider({
+				Title = "Fish Weight",
+				Content = "0% = lightest catch, 100% = heaviest Big catch. Size follows Fish It: weight / min weight.",
+				Min = 0,
+				Max = 100,
+				Default = 0,
+				Increment = 5,
+				Callback = v4732(function(p1100)
+					local fishWeight = (tonumber(p1100) or 0) / 100
+
+					if not __SenaV4Visual or __SenaV4Visual.fishWeight == fishWeight then
+						return
+					end
+
+					__SenaV4Visual.fishWeight = fishWeight
+					task.spawn(__SenaV4Visual.respawn, "fish")
+				end)
+			})
+			v4890:AddSubSection("Manage")
+			v4887 = v4890:AddParagraph({
+				Title = "Status",
+				Content = "Idle"
+			})
+			v4890:AddButton({
+				Title = "Remove All Visual Items",
+				Content = "Takes every spawned rod and fish out of your backpack.",
+				Callback = v4732(function()
+					if __SenaV4Visual then
+						__SenaV4Visual.clear()
+					end
+
+					v4888()
+				end)
+			})
+			task.spawn(function()
+				if not __SenaV4Visual then
+					return
+				end
+
+				local rods = __SenaV4Visual.names("rods")
+				local fish = __SenaV4Visual.names("fish")
+
+				pcall(function()
+					v4891:Refresh(rods)
+				end)
+				pcall(function()
+					v4892:Refresh(fish)
+				end)
+				__SenaV4Visual.status = #rods > 0 and string.format("%d rods and %d fish available", #rods, #fish) or "Could not load the item list. Try again later."
+				v4888()
+			end)
+
+			local v4896 = v4885:AddSection("Steal an Egg")
+			local s21 = "Egg"
+			local n84 = 50
+			local Egg = genv.__SenaV4VisualSAE and genv.__SenaV4VisualSAE.categories("Egg") or {}
+			local u4900 = Egg[1]
+
+			v4896:AddDropdown({
+				Title = "Type",
+				Content = "Egg shows in the Eggs tab, Pet under Pets. Both are fake and local-only.",
+				Options = {
+					"Egg",
+					"Pet"
+				},
+				Multi = false,
+				Default = "Egg",
+				Callback = v4732(function(p1101)
+					s21 = p1101 or "Egg"
+				end)
+			})
+			v4896:AddDropdown({
+				Title = "Select Egg / Pet",
+				Content = "Which egg or pet to spawn.",
+				Options = Egg,
+				Multi = false,
+				Default = Egg[1],
+				MaxVisible = 8,
+				Callback = v4732(function(p1102)
+					u4900 = p1102
+				end)
+			})
+			v4896:AddSlider({
+				Title = "Size / Flex",
+				Content = "Bigger = heavier Kg & higher value (Kg = base weight x scale^3) AND a bigger egg in your hand. 50 hits the billions.",
+				Min = 1,
+				Max = 100,
+				Default = 50,
+				Increment = 1,
+				Callback = v4732(function(p1103)
+					n84 = tonumber(p1103) or 50
+				end)
+			})
+			v4896:AddButton({
+				Title = "Hold in Hand",
+				Content = "Spawns a model of it in your hand. Press again for more. (In-hand only - use the other button to also add it to All Items.)",
+				Callback = v4732(function()
+					local __SenaV4VisualSAE = genv.__SenaV4VisualSAE
+
+					if __SenaV4VisualSAE then
+						__SenaV4VisualSAE.spawn(s21, u4900, n84, true)
+					end
+				end)
+			})
+			v4896:AddButton({
+				Title = "Add to Backpack (Kg)",
+				Content = "Drops it in All Items (eggs) or Pets with a huge Kg for the inventory flex. Press again for more.",
+				Callback = v4732(function()
+					local __SenaV4VisualSAE = genv.__SenaV4VisualSAE
+
+					if __SenaV4VisualSAE then
+						__SenaV4VisualSAE.spawn(s21, u4900, n84, false)
+					end
+				end)
+			})
+			v4896:AddButton({
+				Title = "Remove Egg / Pet Visuals",
+				Content = "Takes every spawned fake egg/pet and held model out.",
+				Callback = v4732(function()
+					local __SenaV4VisualSAE = genv.__SenaV4VisualSAE
+
+					if __SenaV4VisualSAE then
+						__SenaV4VisualSAE.clear()
+					end
+				end)
+			})
+		end
+
+		v4742:AddTab({
+			Name = "Donate",
+			Icon = "donator"
+		}):AddSection("Support Sena", true):AddSupportCard({})
 
 		do
 			local function v4904(p1104, p1105)
@@ -26603,8 +31536,16 @@ do
 			end
 
 			v4731 = false
+			v4904(t216.speed, v4537)
 			v4904(t216.stealMode, v4536)
 			v4904(t216.stealHold, v4527)
+			v4904(t216.antiTreadmill, v4530)
+			v4904(t216.autoTreadmill, v4529)
+			v4904(t216.treadmillUpgrade, v4535)
+			v4904(t216.hopCooldown, v4534)
+			v4904(t216.hopNoMatch, v4531)
+			v4904(t216.privateServerMax, v4532)
+			v4904(t216.privateServerAuto, v4533)
 			v4904(t216.names, function(p1106)
 				v4538("names", "name", p1106)
 			end)
@@ -26616,13 +31557,106 @@ do
 			end)
 			v4904(t216.value, v4539)
 			v4904(t216.autoIndex, v4737)
+			v4904(t216.scrambleBuy, v4564)
+			v4904(t216.scrambleBuyList, v4565)
+			v4904(t216.bloomAutoNet, function(p1109)
+				senaV4Config.ButterflyAutoNet = p1109 == true
+			end)
+			v4904(t216.bloomAutoCatch, function(p1110)
+				senaV4Config.ButterflyAutoCatch = p1110 == true
+			end)
+			v4904(t216.bloomEsp, function(p1111)
+				senaV4Config.ButterflyEsp = p1111 == true
+			end)
+			v4904(t216.bloomAutoTrade, function(p1112)
+				senaV4Config.ButterflyAutoTrade = p1112 == true
+			end)
+			v4904(t216.bloomAutoCraft, function(p1113)
+				senaV4Config.ButterflyAutoCraft = p1113 == true
+			end)
+			v4904(t216.bloomTiers, function(p1114)
+				local __SenaV4ButterflyRuntime = genv.__SenaV4ButterflyRuntime
+
+				if __SenaV4ButterflyRuntime then
+					__SenaV4ButterflyRuntime.setTiers(v4320(p1114))
+				end
+			end)
+			v4904(t216.bloomRecipe, function(p1115)
+				local __SenaV4ButterflyRuntime = genv.__SenaV4ButterflyRuntime
+
+				if __SenaV4ButterflyRuntime then
+					__SenaV4ButterflyRuntime.setRecipe(p1115)
+				end
+			end)
+			v4904(t216.bloomMode, function(p1116)
+				local __SenaV4ButterflyRuntime = genv.__SenaV4ButterflyRuntime
+
+				if __SenaV4ButterflyRuntime then
+					__SenaV4ButterflyRuntime.setMode(p1116)
+				end
+			end)
+			v4904(t216.noclip, v4560)
+			v4904(t216.bottingMode, v4561)
+			v4904(t216.antiCutscene, v4562)
+			v4904(t216.waypoint, function(p1117)
+				u4745 = p1117
+			end)
+			v4904(t216.autoFavorite, v4548)
+			v4904(t216.favoriteRule, v4549)
+			v4904(t216.favoriteRarities, v4550)
+			v4904(t216.favoriteSpecies, v4551)
+			v4904(t216.autoFuse, v4556)
+			v4904(t216.fuseRule, v4557)
+			v4904(t216.fuseRarities, v4558)
+			v4904(t216.fuseSpecies, v4559)
+			v4904(t216.autoEquipBest, v4552)
+			v4904(t216.autoClaimOffline, v4553)
+			v4904(t216.autoBaseUpgrade, v4554)
+			v4904(t216.autoClaimAlmanac, v4555)
 			v4904(t216.mutations, v4540)
 			v4904(t216.weight, v4541)
 			v4904(t216.priority, v4542)
 			v4904(t216.eggEsp, v4543)
 			v4904(t216.espDetails, v4544)
 			v4904(t216.backpackRates, v4546)
+			v4904(t216.antiGuardKnockback, v4547)
+			v4904(t216.placeRarity, function(p1118)
+				senaV4Config.PlaceRarities = v4320(p1118)
+			end)
+			v4904(v4519, function(p1119)
+				senaV4Config.SellNames = v4320(p1119)
+			end)
+			v4904(v4520, function(p1120)
+				senaV4Config.SellRarities = v4320(p1120)
+			end)
+			v4904(v4521, function(p1121)
+				senaV4Config.SellEggRarities = v4320(p1121)
+			end)
+			v4904(t216.sellPetValue, v4576)
+			v4904(t216.sellEggValue, v4577)
 			v4904(t216.godMode, v4528)
+			v4904(t216.antiAfk, v4727)
+			v4904(t216.autoReconnect, v4728)
+			v4904(t216.autoExecute, v4729)
+			v4904(t216.antiHitGuard, v4726)
+			v4904(t216.flyForCapture, v4722)
+			v4904(t216.autoStealCapture, v4724)
+			v4904(t216.instantGrab, v4723)
+			v4904(t216.infiniteJump, v4725)
+			v4904(t216.uncapFps, v4720)
+			v4904(t216.startupBoost, v4717)
+			v4904(t216.autoPlace, v4566)
+			v4904(t216.autoHatch, v4567)
+			v4904(t216.mutationChoice, v4570)
+			v4904(t216.mutationSpecies, v4571)
+			v4904(t216.mutationRarity, v4572)
+			v4904(t216.mutationRetry, v4573)
+			v4904(t216.autoMutation, v4568)
+			v4904(t216.autoRingEvent, v4569)
+			v4904(t216.autoSell, v4574)
+			v4904(t216.autoSellEgg, v4575)
+			v4904(t216.stealPlayerRarities, v4735)
+			v4904(t216.stealPlayerValue, v4736)
 			v4904(t216.webhookUrl, v4739)
 			v4904(t216.webhookRarities, v4740)
 			v4904(t216.webhookValue, v4741)
@@ -26631,6 +31665,7 @@ do
 				senaV4Config.HelpFriend = p1122 == true
 			end)
 			v4904(t216.autoSteal, v4526)
+			v4904(t216.stealPlayers, v4734)
 		end
 
 		do
