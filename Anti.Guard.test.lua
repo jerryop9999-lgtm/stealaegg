@@ -19,8 +19,19 @@ local RETURN_BACK = true -- true = ត្រឡប់ទៅកន្លែងដ
 local SHOW_LOADING = true -- true = បង្ហាញ Loading ពេញអេក្រង់ ពេលកំពុងទៅ SafeZone
 local AUTO_STEAL_SPEED = 150        -- Auto Steal: ល្បឿនធ្វើដំណើរ (studs/វិនាទី) ធំ = លឿន តែប្រថុយ Anti-cheat ខ្ពស់
 local AUTO_STEAL_CARRY_TIMEOUT = 3  -- រង់ចាំបញ្ជាក់ថាបានយក Egg (វិនាទី) បើអស់ពេលរំលង Egg នោះ
-local AUTO_STEAL_PRIORITY = "Nearest" -- "Nearest" = ជិតបំផុត, "Rarity" = កម្រជាងមុន
-local AUTO_STEAL_RARITIES = {}      -- ទទេ = យកទាំងអស់ ឬដាក់ឧ. {"Legendary", "Mythic"}
+-- ការ Select របស់ Auto Steal (កែតាម UI "Auto Steal Filters")
+local AUTO_CFG = {
+    Priority = "Nearest", -- Nearest / Rarity / Value
+    Rarities = {},        -- set: ទទេ = យកទាំងអស់
+    Areas = {},
+    Names = {},
+    Mutations = {},
+    MinValue = 0,
+}
+local RARITY_RANK = {
+    Common = 1, Uncommon = 2, Rare = 3, Epic = 4, Legendary = 5,
+    Mythic = 6, Cosmic = 7, Secret = 8, Eternal = 9, Divine = 10
+}
 local ACCENT_1 = Color3.fromRGB(140, 90, 255)
 local ACCENT_2 = Color3.fromRGB(60, 160, 255)
 local ON_COLOR = Color3.fromRGB(60, 220, 130)
@@ -140,9 +151,9 @@ end
 -- ============ Main UI (ថ្លាៗ) ============
 local MainFrame = Instance.new("CanvasGroup")
 MainFrame.Name = "MainFrame"
-MainFrame.Size = UDim2.new(0, 270, 0, 247)
+MainFrame.Size = UDim2.new(0, 270, 0, 284)
 MainFrame.AnchorPoint = Vector2.new(0.5, 0.5)
-MainFrame.Position = UDim2.new(0.3, 135, 0.3, 124)
+MainFrame.Position = UDim2.new(0.3, 135, 0.3, 142)
 MainFrame.GroupTransparency = 1
 MainFrame.BackgroundColor3 = Color3.fromRGB(14, 14, 24)
 MainFrame.BackgroundTransparency = 0.25
@@ -341,6 +352,368 @@ local function makeCard(titleText, subText, y)
 end
 
 local AutoBtn, AutoSwitch, AutoKnob, autoStroke = makeCard("Auto Steal", "Auto grab eggs → SafeZone", 138)
+
+-- ===== Auto Steal Filters (Select UI) =====
+local FilterBtn = Instance.new("TextButton")
+FilterBtn.Name = "FilterBtn"
+FilterBtn.Size = UDim2.new(1, -28, 0, 32)
+FilterBtn.Position = UDim2.new(0, 14, 0, 208)
+FilterBtn.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+FilterBtn.BackgroundTransparency = 0.92
+FilterBtn.Text = "⚙   Auto Steal Filters"
+FilterBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+FilterBtn.Font = Enum.Font.GothamBold
+FilterBtn.TextSize = 13
+FilterBtn.AutoButtonColor = false
+FilterBtn.Parent = MainFrame
+corner(FilterBtn, UDim.new(0, 10))
+stroke(FilterBtn, ACCENT_1, 1.2, 0.4)
+
+do
+    local RS = game:GetService("ReplicatedStorage")
+    local WHITE = Color3.fromRGB(255, 255, 255)
+
+    local function label(parent, text, size, pos, font, tsize, color, align)
+        local l = Instance.new("TextLabel")
+        l.Size = size
+        l.Position = pos
+        l.BackgroundTransparency = 1
+        l.Text = text
+        l.TextColor3 = color or WHITE
+        l.Font = font or Enum.Font.Gotham
+        l.TextSize = tsize or 13
+        l.TextXAlignment = align or Enum.TextXAlignment.Left
+        l.Parent = parent
+        return l
+    end
+    local function button(parent, text, size, pos, bgT)
+        local b = Instance.new("TextButton")
+        b.Size = size
+        b.Position = pos
+        b.BackgroundColor3 = WHITE
+        b.BackgroundTransparency = bgT or 0.88
+        b.Text = text
+        b.TextColor3 = WHITE
+        b.Font = Enum.Font.GothamBold
+        b.TextSize = 13
+        b.AutoButtonColor = false
+        b.Parent = parent
+        return b
+    end
+
+    -- ---------- Panel ----------
+    local Panel = Instance.new("Frame")
+    Panel.Name = "FilterPanel"
+    Panel.Size = UDim2.new(1, 0, 1, 0)
+    Panel.BackgroundColor3 = Color3.fromRGB(22, 18, 44)
+    Panel.BackgroundTransparency = 0.04
+    Panel.BorderSizePixel = 0
+    Panel.Visible = false
+    Panel.ZIndex = 5
+    Panel.Parent = MainFrame
+    corner(Panel, UDim.new(0, 16))
+
+    local Back = button(Panel, "‹", UDim2.new(0, 30, 0, 30), UDim2.new(0, 10, 0, 10))
+    Back.TextSize = 22
+    corner(Back, UDim.new(1, 0))
+    label(Panel, "Auto Steal Filters", UDim2.new(1, -130, 0, 30), UDim2.new(0, 48, 0, 10), Enum.Font.GothamBlack, 15)
+    local ResetBtn = button(Panel, "Reset", UDim2.new(0, 56, 0, 26), UDim2.new(1, -66, 0, 12))
+    ResetBtn.TextSize = 12
+    corner(ResetBtn, UDim.new(0, 8))
+
+    local Rows = Instance.new("ScrollingFrame")
+    Rows.Size = UDim2.new(1, -20, 1, -54)
+    Rows.Position = UDim2.new(0, 10, 0, 48)
+    Rows.BackgroundTransparency = 1
+    Rows.BorderSizePixel = 0
+    Rows.ScrollBarThickness = 3
+    Rows.AutomaticCanvasSize = Enum.AutomaticSize.Y
+    Rows.CanvasSize = UDim2.new(0, 0, 0, 0)
+    Rows.Parent = Panel
+    local rowsLayout = Instance.new("UIListLayout")
+    rowsLayout.Padding = UDim.new(0, 8)
+    rowsLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    rowsLayout.Parent = Rows
+
+    local function makeRow(order)
+        local b = Instance.new("TextButton")
+        b.Size = UDim2.new(1, -6, 0, 38)
+        b.LayoutOrder = order
+        b.BackgroundColor3 = WHITE
+        b.BackgroundTransparency = 0.9
+        b.Text = ""
+        b.AutoButtonColor = false
+        b.Parent = Rows
+        corner(b, UDim.new(0, 10))
+        local l = label(b, "", UDim2.new(1, -34, 1, 0), UDim2.new(0, 12, 0, 0), Enum.Font.GothamBold, 12)
+        label(b, "›", UDim2.new(0, 20, 1, 0), UDim2.new(1, -24, 0, 0), Enum.Font.GothamBold, 18, nil, Enum.TextXAlignment.Center)
+        return b, l
+    end
+
+    local function summary(set)
+        local names = {}
+        for k in pairs(set) do table.insert(names, k) end
+        table.sort(names)
+        if #names == 0 then return "Any" end
+        if #names <= 2 then return table.concat(names, ", ") end
+        return #names .. " selected"
+    end
+
+    local PriorityRow, PriorityLbl = makeRow(1)
+    local RarityRow, RarityLbl = makeRow(2)
+    local AreaRow, AreaLbl = makeRow(3)
+    local NameRow, NameLbl = makeRow(4)
+    local MutationRow, MutationLbl = makeRow(5)
+
+    -- Min Value (TextBox)
+    local ValueRow = Instance.new("Frame")
+    ValueRow.Size = UDim2.new(1, -6, 0, 38)
+    ValueRow.LayoutOrder = 6
+    ValueRow.BackgroundColor3 = WHITE
+    ValueRow.BackgroundTransparency = 0.9
+    ValueRow.Parent = Rows
+    corner(ValueRow, UDim.new(0, 10))
+    label(ValueRow, "Min Value", UDim2.new(0.5, 0, 1, 0), UDim2.new(0, 12, 0, 0), Enum.Font.GothamBold, 12)
+    local ValueBox = Instance.new("TextBox")
+    ValueBox.Size = UDim2.new(0.42, 0, 0, 26)
+    ValueBox.Position = UDim2.new(0.58, -8, 0.5, -13)
+    ValueBox.BackgroundColor3 = WHITE
+    ValueBox.BackgroundTransparency = 0.85
+    ValueBox.Text = "0"
+    ValueBox.PlaceholderText = "1k / 2.5m"
+    ValueBox.TextColor3 = WHITE
+    ValueBox.PlaceholderColor3 = Color3.fromRGB(170, 170, 195)
+    ValueBox.Font = Enum.Font.Gotham
+    ValueBox.TextSize = 12
+    ValueBox.ClearTextOnFocus = false
+    ValueBox.Parent = ValueRow
+    corner(ValueBox, UDim.new(0, 8))
+
+    local function refreshRows()
+        PriorityLbl.Text = "Priority:  " .. AUTO_CFG.Priority
+        RarityLbl.Text = "Rarity:  " .. summary(AUTO_CFG.Rarities)
+        AreaLbl.Text = "Area:  " .. summary(AUTO_CFG.Areas)
+        NameLbl.Text = "Name:  " .. summary(AUTO_CFG.Names)
+        MutationLbl.Text = "Mutation:  " .. summary(AUTO_CFG.Mutations)
+    end
+    refreshRows()
+
+    -- ---------- Select Popup ----------
+    local Popup = Instance.new("Frame")
+    Popup.Size = UDim2.new(1, 0, 1, 0)
+    Popup.BackgroundColor3 = Color3.fromRGB(18, 16, 36)
+    Popup.BorderSizePixel = 0
+    Popup.Visible = false
+    Popup.ZIndex = 10
+    Popup.Parent = Panel
+    corner(Popup, UDim.new(0, 16))
+
+    local PopTitle = label(Popup, "", UDim2.new(1, -100, 0, 28), UDim2.new(0, 14, 0, 12), Enum.Font.GothamBlack, 15)
+    local DoneBtn = button(Popup, "Done", UDim2.new(0, 62, 0, 28), UDim2.new(1, -74, 0, 12), 0.5)
+    DoneBtn.BackgroundColor3 = ACCENT_1
+    corner(DoneBtn, UDim.new(0, 8))
+
+    local Search = Instance.new("TextBox")
+    Search.Size = UDim2.new(1, -24, 0, 30)
+    Search.Position = UDim2.new(0, 12, 0, 48)
+    Search.BackgroundColor3 = WHITE
+    Search.BackgroundTransparency = 0.9
+    Search.Text = ""
+    Search.PlaceholderText = "Search..."
+    Search.TextColor3 = WHITE
+    Search.PlaceholderColor3 = Color3.fromRGB(170, 170, 195)
+    Search.Font = Enum.Font.Gotham
+    Search.TextSize = 13
+    Search.ClearTextOnFocus = false
+    Search.Parent = Popup
+    corner(Search, UDim.new(0, 8))
+
+    local AllBtn = button(Popup, "Select All", UDim2.new(0.5, -18, 0, 28), UDim2.new(0, 12, 0, 84))
+    corner(AllBtn, UDim.new(0, 8))
+    local ClearBtn = button(Popup, "Clear", UDim2.new(0.5, -18, 0, 28), UDim2.new(0.5, 6, 0, 84))
+    corner(ClearBtn, UDim.new(0, 8))
+
+    local List = Instance.new("ScrollingFrame")
+    List.Size = UDim2.new(1, -20, 1, -126)
+    List.Position = UDim2.new(0, 10, 0, 118)
+    List.BackgroundTransparency = 1
+    List.BorderSizePixel = 0
+    List.ScrollBarThickness = 3
+    List.AutomaticCanvasSize = Enum.AutomaticSize.Y
+    List.CanvasSize = UDim2.new(0, 0, 0, 0)
+    List.Parent = Popup
+    local listLayout = Instance.new("UIListLayout")
+    listLayout.Padding = UDim.new(0, 5)
+    listLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    listLayout.Parent = List
+
+    local popSet, popOptions = {}, {}
+
+    local function renderList()
+        for _, c in ipairs(List:GetChildren()) do
+            if c:IsA("GuiObject") then c:Destroy() end
+        end
+        local q = string.lower(Search.Text or "")
+        if #popOptions == 0 then
+            local empty = label(List, "ផ្ទុកបញ្ជីមិនបាន (Executor ត្រូវគាំទ្រ require)", UDim2.new(1, -6, 0, 40), UDim2.new(0, 0, 0, 0), Enum.Font.Gotham, 12, Color3.fromRGB(200, 200, 220))
+            empty.TextWrapped = true
+            return
+        end
+        for i, name in ipairs(popOptions) do
+            if q == "" or string.find(string.lower(name), q, 1, true) then
+                local it = Instance.new("TextButton")
+                it.Size = UDim2.new(1, -6, 0, 32)
+                it.LayoutOrder = i
+                it.BackgroundColor3 = WHITE
+                it.Text = ""
+                it.AutoButtonColor = false
+                it.Parent = List
+                corner(it, UDim.new(0, 8))
+                label(it, name, UDim2.new(1, -40, 1, 0), UDim2.new(0, 12, 0, 0), Enum.Font.Gotham, 12)
+                local mark = label(it, "", UDim2.new(0, 24, 1, 0), UDim2.new(1, -30, 0, 0), Enum.Font.GothamBold, 15, ON_COLOR, Enum.TextXAlignment.Center)
+                local function paint()
+                    mark.Text = popSet[name] and "✓" or ""
+                    it.BackgroundTransparency = popSet[name] and 0.75 or 0.93
+                end
+                paint()
+                it.MouseButton1Click:Connect(function()
+                    popSet[name] = (not popSet[name]) or nil
+                    paint()
+                end)
+            end
+        end
+    end
+    Search:GetPropertyChangedSignal("Text"):Connect(renderList)
+
+    -- ---------- Data providers (ពី Module របស់ហ្គេម) ----------
+    local cache = {}
+    local function getOptions(kind)
+        if cache[kind] and #cache[kind] > 0 then return cache[kind] end
+        local list = {}
+        pcall(function()
+            if kind == "Rarity" then
+                local Assets = require(RS.Data.Assets)
+                for k in pairs(Assets.ByRarity) do table.insert(list, k) end
+                table.sort(list, function(a, b)
+                    return (RARITY_RANK[a] or 99) < (RARITY_RANK[b] or 99)
+                end)
+            elseif kind == "Area" then
+                local Areas = require(RS.Data.Areas)
+                local Guards = require(RS.Data.Guards)
+                for k, v in pairs(Areas.Directory) do
+                    if type(k) == "string" and type(v) == "table" and type(v.DropTable) == "table" then
+                        table.insert(list, k)
+                    end
+                end
+                table.sort(list, function(a, b)
+                    local ga, gb = Guards.Directory[a], Guards.Directory[b]
+                    local wa = ga and ga.WalkSpeed or math.huge
+                    local wb = gb and gb.WalkSpeed or math.huge
+                    if wa == wb then return a < b end
+                    return wa < wb
+                end)
+            elseif kind == "Name" then
+                local Assets = require(RS.Data.Assets)
+                local seen = {}
+                for _, v in pairs(Assets.Directory) do
+                    local n = v.DisplayName or v._id
+                    if type(n) == "string" and n ~= "" and not seen[n] then
+                        seen[n] = true
+                        table.insert(list, n)
+                    end
+                end
+                table.sort(list)
+            elseif kind == "Mutation" then
+                local M = require(RS.Shared.Modules.Mutations)
+                for id in pairs(M.Ids()) do
+                    if type(id) == "string" and id ~= M.NO_MUTATION then
+                        local ok, lab = pcall(M.LabelOf, id)
+                        table.insert(list, (ok and type(lab) == "string" and lab ~= "") and lab or id)
+                    end
+                end
+                table.sort(list)
+            end
+        end)
+        cache[kind] = list
+        return list
+    end
+
+    local function openSelect(title, kind, set)
+        PopTitle.Text = title
+        popSet = set
+        popOptions = getOptions(kind)
+        Search.Text = ""
+        renderList()
+        Popup.Visible = true
+    end
+
+    AllBtn.MouseButton1Click:Connect(function()
+        local q = string.lower(Search.Text or "")
+        for _, name in ipairs(popOptions) do
+            if q == "" or string.find(string.lower(name), q, 1, true) then
+                popSet[name] = true
+            end
+        end
+        renderList()
+    end)
+    ClearBtn.MouseButton1Click:Connect(function()
+        for k in pairs(popSet) do popSet[k] = nil end
+        renderList()
+    end)
+    DoneBtn.MouseButton1Click:Connect(function()
+        Popup.Visible = false
+        refreshRows()
+    end)
+
+    -- ---------- Row actions ----------
+    local priorities = {"Nearest", "Rarity", "Value"}
+    PriorityRow.MouseButton1Click:Connect(function()
+        local idx = table.find(priorities, AUTO_CFG.Priority) or 1
+        AUTO_CFG.Priority = priorities[idx % #priorities + 1]
+        refreshRows()
+    end)
+    RarityRow.MouseButton1Click:Connect(function() openSelect("Select Rarity", "Rarity", AUTO_CFG.Rarities) end)
+    AreaRow.MouseButton1Click:Connect(function() openSelect("Select Area", "Area", AUTO_CFG.Areas) end)
+    NameRow.MouseButton1Click:Connect(function() openSelect("Select Name", "Name", AUTO_CFG.Names) end)
+    MutationRow.MouseButton1Click:Connect(function() openSelect("Select Mutation", "Mutation", AUTO_CFG.Mutations) end)
+
+    local function parseValue(text)
+        local t = string.lower(tostring(text or "")):gsub("[%s,]", "")
+        if t == "" then return 0 end
+        local num, suffix = string.match(t, "^(%d+%.?%d*)([kmb]?)$")
+        local n = tonumber(num)
+        if not n then return nil end
+        local mult = ({k = 1e3, m = 1e6, b = 1e9})[suffix] or 1
+        return n * mult
+    end
+    ValueBox.FocusLost:Connect(function()
+        local v = parseValue(ValueBox.Text)
+        if v then
+            AUTO_CFG.MinValue = v
+        else
+            ValueBox.Text = tostring(AUTO_CFG.MinValue)
+        end
+    end)
+
+    ResetBtn.MouseButton1Click:Connect(function()
+        for _, key in ipairs({"Rarities", "Areas", "Names", "Mutations"}) do
+            for k in pairs(AUTO_CFG[key]) do AUTO_CFG[key][k] = nil end
+        end
+        AUTO_CFG.Priority = "Nearest"
+        AUTO_CFG.MinValue = 0
+        ValueBox.Text = "0"
+        refreshRows()
+    end)
+
+    Back.MouseButton1Click:Connect(function()
+        Popup.Visible = false
+        Panel.Visible = false
+    end)
+    FilterBtn.MouseButton1Click:Connect(function()
+        refreshRows()
+        Panel.Visible = true
+    end)
+end
 
 
 -- ===== Smooth Drag (អូសរលូន) =====
@@ -694,10 +1067,8 @@ local carrying = false
 local EggStateMod, EggWorldRemote, ResetWallMod, AssetsMod
 local skipUntil = {}
 local warnedModules = false
-local RARITY_RANK = {
-    Common = 1, Uncommon = 2, Rare = 3, Epic = 4, Legendary = 5,
-    Mythic = 6, Cosmic = 7, Secret = 8, Eternal = 9, Divine = 10
-}
+local printedFields = false
+local warnedArea = false
 
 local function loadEggModules()
     if EggStateMod and EggWorldRemote then return true end
@@ -742,9 +1113,92 @@ local function rarityOf(rec)
     return name
 end
 
-local function rarityAllowed(rec)
-    if #AUTO_STEAL_RARITIES == 0 then return true end
-    return table.find(AUTO_STEAL_RARITIES, rarityOf(rec)) ~= nil
+local function nameOf(rec)
+    local name
+    pcall(function()
+        local info = AssetsMod and AssetsMod.Directory[rec.AssetCategory]
+        name = info and (info.DisplayName or info._id)
+    end)
+    return name or tostring(rec.AssetCategory)
+end
+
+local EarningsMod
+local function eggValue(rec)
+    local v = 0
+    pcall(function()
+        EarningsMod = EarningsMod or require(game:GetService("ReplicatedStorage").Shared.Util.AssetEarnings)
+        v = EarningsMod.MutationOnlyRatePerSecond({
+            Category = rec.AssetCategory,
+            Scale = rec.AssetScale or 1,
+            Mutations = rec.Mutations or {},
+            BaseMutation = rec.BaseMutation,
+            EyeColor = rec.AssetEyeColor,
+            ColorSeed = rec.AssetColorSeed,
+            ColorIndex = rec.AssetColorIndex,
+            Gender = rec.Gender,
+            Personality = rec.Personality or "Normal",
+            HasBeenFirstPlaced = rec.HasBeenFirstPlaced == true
+        })
+    end)
+    return tonumber(v) or 0
+end
+
+local AREA_FIELDS = {"Area", "AreaId", "AreaName", "AreaKey", "AreaCategory", "SourceArea"}
+local function areaOf(rec)
+    for _, f in ipairs(AREA_FIELDS) do
+        local v = rec[f]
+        if type(v) == "string" then return v end
+    end
+    return nil
+end
+
+local function selectedMutationIds()
+    if next(AUTO_CFG.Mutations) == nil then return nil end
+    local ids = {}
+    pcall(function()
+        local M = require(game:GetService("ReplicatedStorage").Shared.Modules.Mutations)
+        for id in pairs(M.Ids()) do
+            if id ~= M.NO_MUTATION then
+                local ok, lab = pcall(M.LabelOf, id)
+                if AUTO_CFG.Mutations[id] or (ok and AUTO_CFG.Mutations[lab]) then
+                    ids[id] = true
+                end
+            end
+        end
+    end)
+    return ids
+end
+
+local function passesFilters(rec, mutIds)
+    if next(AUTO_CFG.Rarities) ~= nil and not AUTO_CFG.Rarities[rarityOf(rec) or ""] then
+        return false
+    end
+    if next(AUTO_CFG.Names) ~= nil and not AUTO_CFG.Names[nameOf(rec)] then
+        return false
+    end
+    if next(AUTO_CFG.Areas) ~= nil then
+        local a = areaOf(rec)
+        if a == nil then
+            if not warnedArea then
+                warnedArea = true
+                warn("[Auto Steal] Egg មិនមាន field Area (មើល Console: Egg record fields) → Area filter ត្រូវបានរំលង")
+            end
+        elseif not AUTO_CFG.Areas[a] then
+            return false
+        end
+    end
+    if mutIds then
+        local ok = false
+        for _, m in ipairs(rec.Mutations or {}) do
+            if mutIds[m] then ok = true break end
+        end
+        if not ok and rec.BaseMutation ~= nil and mutIds[rec.BaseMutation] then ok = true end
+        if not ok then return false end
+    end
+    if AUTO_CFG.MinValue > 0 and eggValue(rec) < AUTO_CFG.MinValue then
+        return false
+    end
+    return true
 end
 
 local function pickTarget(fromPos)
@@ -753,15 +1207,29 @@ local function pickTarget(fromPos)
     local records = snapshot and snapshot.Records
     if not records then return nil end
 
+    if not printedFields then
+        for _, rec in pairs(records) do
+            local keys = {}
+            for k in pairs(rec) do table.insert(keys, tostring(k)) end
+            table.sort(keys)
+            print("[Auto Steal] Egg record fields: " .. table.concat(keys, ", "))
+            printedFields = true
+            break
+        end
+    end
+
+    local mutIds = selectedMutationIds()
     local bestUid, bestRec, bestScore = nil, nil, -math.huge
     for uid, rec in pairs(records) do
         local state = rec.State
         if (state == "Slot" or state == "Dropped") and rec.BottomCFrame
-            and (skipUntil[uid] or 0) < os.clock() and rarityAllowed(rec) then
+            and (skipUntil[uid] or 0) < os.clock() and passesFilters(rec, mutIds) then
             local dist = (rec.BottomCFrame.Position - fromPos).Magnitude
             local score = -dist
-            if AUTO_STEAL_PRIORITY == "Rarity" then
+            if AUTO_CFG.Priority == "Rarity" then
                 score = (RARITY_RANK[rarityOf(rec) or ""] or 0) * 100000 - dist
+            elseif AUTO_CFG.Priority == "Value" then
+                score = eggValue(rec) - dist * 0.001
             end
             if score > bestScore then
                 bestUid, bestRec, bestScore = uid, rec, score
