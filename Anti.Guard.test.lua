@@ -26362,9 +26362,15 @@ do
 			})
 			v4779(v4742)
 			;(function()
-				-- ===== Floating logo button (toggles the Sena UI) =====
-				local LOGO_IMAGE = "rbxassetid://77896693340732" -- your logo: "rbxassetid://123" or a direct .png/.jpg link ("" = letter S)
-				local BUTTON_SIZE = 56
+				-- ===== Floating logo button v2 (toggles the Sena UI) =====
+				local LOGO_IMAGE = "rbxassetid://77896693340732" -- "rbxassetid://..." or direct .png/.jpg link ("" = letter S)
+				local SIZE = 60          -- button size (px)
+				local MARGIN = 8         -- gap to the screen edge
+				local SNAP_TO_EDGE = true
+				local ACCENT_1 = Color3.fromRGB(140, 90, 255)
+				local ACCENT_2 = Color3.fromRGB(60, 160, 255)
+				local ON_COLOR = Color3.fromRGB(60, 220, 130)
+				local OFF_COLOR = Color3.fromRGB(235, 80, 90)
 
 				if type(genv.__SenaZinFloatCleanup) == "function" then
 					pcall(genv.__SenaZinFloatCleanup)
@@ -26372,10 +26378,11 @@ do
 
 				local UIS = game:GetService("UserInputService")
 				local TS = game:GetService("TweenService")
+				local RS = game:GetService("RunService")
 				local snap = genv.__SenaZinUiSnap
 				if not snap then return end
 
-				-- find the ScreenGui(s) the library created
+				-- ScreenGui(s) created by the library
 				local function senaGuis()
 					local list = {}
 					for _, c in ipairs(snap.root:GetChildren()) do
@@ -26386,34 +26393,64 @@ do
 					return list
 				end
 
+				-- logo image (download if it's a link)
 				local image = LOGO_IMAGE
 				if image:match("^https?://") then
 					local ok, asset = pcall(function()
-						local data = game:HttpGet(image)
-						writefile("sena_logo.png", data)
+						writefile("sena_logo.png", game:HttpGet(image))
 						return (getcustomasset or getsynasset)("sena_logo.png")
 					end)
 					image = ok and asset or ""
+				end
+
+				local function tw(obj, t, props, style, dir)
+					TS:Create(obj, TweenInfo.new(t, style or Enum.EasingStyle.Quad, dir or Enum.EasingDirection.Out), props):Play()
 				end
 
 				local gui = Instance.new("ScreenGui")
 				gui.Name = "SenaZinFloat"
 				gui.ResetOnSpawn = false
 				gui.DisplayOrder = 999
+				gui.IgnoreGuiInset = true
 				gui.Parent = snap.root
 
+				-- holder = ring with a rotating gradient border
+				local holder = Instance.new("Frame")
+				holder.Name = "Holder"
+				holder.Size = UDim2.fromOffset(SIZE, SIZE)
+				holder.BackgroundColor3 = Color3.fromRGB(14, 14, 24)
+				holder.BackgroundTransparency = 0.15
+				holder.BorderSizePixel = 0
+				holder.Parent = gui
+				Instance.new("UICorner", holder).CornerRadius = UDim.new(1, 0)
+
+				local scale = Instance.new("UIScale", holder)
+				scale.Scale = 0
+
+				local ring = Instance.new("UIStroke", holder)
+				ring.Thickness = 2.5
+				ring.Color = Color3.new(1, 1, 1)
+				ring.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+				local grad = Instance.new("UIGradient", ring)
+				grad.Color = ColorSequence.new({
+					ColorSequenceKeypoint.new(0, ACCENT_1),
+					ColorSequenceKeypoint.new(0.5, ACCENT_2),
+					ColorSequenceKeypoint.new(1, ACCENT_1),
+				})
+
+				-- logo button inside the ring
 				local btn = Instance.new("ImageButton")
-				btn.Size = UDim2.fromOffset(BUTTON_SIZE, BUTTON_SIZE)
-				btn.Position = UDim2.new(0.1, 0, 0.1, 0)
+				btn.Name = "Logo"
+				btn.AnchorPoint = Vector2.new(0.5, 0.5)
+				btn.Position = UDim2.fromScale(0.5, 0.5)
+				btn.Size = UDim2.new(1, -8, 1, -8)
 				btn.BackgroundColor3 = Color3.fromRGB(30, 30, 45)
+				btn.BackgroundTransparency = (image == "") and 0 or 1
 				btn.AutoButtonColor = false
 				btn.ScaleType = Enum.ScaleType.Crop
 				btn.Image = image
-				btn.Parent = gui
+				btn.Parent = holder
 				Instance.new("UICorner", btn).CornerRadius = UDim.new(1, 0)
-				local st = Instance.new("UIStroke", btn)
-				st.Thickness = 2
-				st.Color = Color3.fromRGB(140, 90, 255)
 
 				if image == "" then
 					local t = Instance.new("TextLabel", btn)
@@ -26423,44 +26460,139 @@ do
 					t.TextColor3 = Color3.new(1, 1, 1)
 					t.Font = Enum.Font.GothamBlack
 					t.TextScaled = true
+					local pad = Instance.new("UIPadding", t)
+					pad.PaddingTop = UDim.new(0.2, 0)
+					pad.PaddingBottom = UDim.new(0.2, 0)
 				end
 
-				-- toggle the library UI
+				-- status dot: green = UI open, red = UI hidden
+				local dot = Instance.new("Frame")
+				dot.Size = UDim2.fromOffset(14, 14)
+				dot.Position = UDim2.new(1, -14, 1, -14)
+				dot.BackgroundColor3 = ON_COLOR
+				dot.BorderSizePixel = 0
+				dot.ZIndex = 5
+				dot.Parent = holder
+				Instance.new("UICorner", dot).CornerRadius = UDim.new(1, 0)
+				local dotStroke = Instance.new("UIStroke", dot)
+				dotStroke.Thickness = 2
+				dotStroke.Color = Color3.fromRGB(14, 14, 24)
+
+				-- hide the library's own floating button (keep only ours)
+				local hidden = {}
+				local alive = true
+				local function hideLibButton()
+					for _, g in ipairs(senaGuis()) do
+						for _, d in ipairs(g:GetDescendants()) do
+							if d:IsA("GuiObject") and not hidden[d]
+								and (d:IsA("GuiButton") or (d:IsA("TextLabel") and d.Text == "S")) then
+								local s = d.AbsoluteSize
+								local small = s.X >= 30 and s.Y >= 30 and s.X <= 150 and s.Y <= 150
+								local top = d
+								while small and top.Parent and top.Parent ~= g do
+									top = top.Parent
+									if top:IsA("GuiObject") and (top.AbsoluteSize.X > 150 or top.AbsoluteSize.Y > 150) then
+										small = false
+									end
+								end
+								if small and top:IsA("GuiObject") then
+									hidden[d] = true
+									hidden[top] = true
+									top.Visible = false
+									print("[Sena] hid default button:", top:GetFullName())
+								end
+							end
+						end
+					end
+				end
+				task.spawn(function()
+					for _ = 1, 40 do
+						if not alive then return end
+						pcall(hideLibButton)
+						task.wait(0.5)
+					end
+				end)
+
+				-- show / hide the library UI
 				local shown = true
-				local function toggle()
-					shown = not shown
+				local function setShown(v)
+					shown = v
 					for _, g in ipairs(senaGuis()) do
 						g.Enabled = shown
 					end
+					tw(dot, 0.2, {BackgroundColor3 = shown and ON_COLOR or OFF_COLOR})
+					tw(btn, 0.2, {ImageTransparency = shown and 0 or 0.45})
+					tw(ring, 0.2, {Transparency = shown and 0 or 0.55})
 				end
 
-				-- drag + click
-				local dragging, moved, startMouse, startPos = false, false, nil, nil
+				-- position (smooth follow + clamp + snap to edge)
+				local function viewport() return gui.AbsoluteSize end
+				local function clamp(v)
+					local vp = viewport()
+					return Vector2.new(
+						math.clamp(v.X, MARGIN, math.max(MARGIN, vp.X - SIZE - MARGIN)),
+						math.clamp(v.Y, MARGIN, math.max(MARGIN, vp.Y - SIZE - MARGIN))
+					)
+				end
+				local vp0 = viewport()
+				local startPos = genv.__SenaZinFloatPos or Vector2.new(vp0.X * 0.085, vp0.Y * 0.17)
+				local pos = clamp(startPos)
+				local target = pos
+				holder.Position = UDim2.fromOffset(pos.X, pos.Y)
+
 				local conns = {}
+				conns[#conns + 1] = RS.RenderStepped:Connect(function(dt)
+					pos = pos:Lerp(target, 1 - math.exp(-dt * 25))
+					holder.Position = UDim2.fromOffset(pos.X, pos.Y)
+					grad.Rotation = (grad.Rotation + dt * 90) % 360
+				end)
+
+				-- intro animation
+				tw(scale, 0.5, {Scale = 1}, Enum.EasingStyle.Back)
+
+				-- drag + click
+				local dragging, moved, dragInput, startMouse, startTarget = false, false, nil, nil, nil
 				conns[#conns + 1] = btn.InputBegan:Connect(function(i)
 					if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
 						dragging, moved = true, false
-						startMouse, startPos = i.Position, btn.Position
+						dragInput = i
+						startMouse = i.Position
+						startTarget = target
+						tw(scale, 0.12, {Scale = 0.88})
 					end
 				end)
 				conns[#conns + 1] = UIS.InputChanged:Connect(function(i)
-					if dragging and (i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch) then
+					if dragging and (i == dragInput or i.UserInputType == Enum.UserInputType.MouseMovement) then
 						local d = i.Position - startMouse
-						if d.Magnitude > 6 then moved = true end
+						if not moved and Vector2.new(d.X, d.Y).Magnitude > 6 then moved = true end
 						if moved then
-							btn.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + d.X, startPos.Y.Scale, startPos.Y.Offset + d.Y)
+							target = clamp(startTarget + Vector2.new(d.X, d.Y))
 						end
 					end
 				end)
 				conns[#conns + 1] = UIS.InputEnded:Connect(function(i)
-					if dragging and (i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch) then
+					if dragging and (i == dragInput or i.UserInputType == Enum.UserInputType.MouseButton1) then
 						dragging = false
-						if not moved then toggle() end
+						tw(scale, 0.3, {Scale = 1}, Enum.EasingStyle.Back)
+						if moved then
+							if SNAP_TO_EDGE then
+								local vp = viewport()
+								local x = (target.X + SIZE / 2 < vp.X / 2) and MARGIN or (vp.X - SIZE - MARGIN)
+								target = clamp(Vector2.new(x, target.Y))
+							end
+							genv.__SenaZinFloatPos = target
+						else
+							setShown(not shown)
+						end
 					end
 				end)
 
 				genv.__SenaZinFloatCleanup = function()
+					alive = false
 					for _, c in ipairs(conns) do pcall(function() c:Disconnect() end) end
+					for top in pairs(hidden) do
+						pcall(function() if top:IsA("GuiObject") then top.Visible = true end end)
+					end
 					pcall(function() gui:Destroy() end)
 					for _, g in ipairs(senaGuis()) do g.Enabled = true end
 				end
