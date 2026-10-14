@@ -1091,7 +1091,7 @@ local autoStealActive = false
 local autoStealToken = 0
 local carrying = false
 local carryInflight = false
-local EggStateMod, EggWorldRemote, ResetWallMod, AssetsMod, CycleMod, EggRecordsMod
+local EggStateMod, EggWorldRemote, ResetWallMod, AssetsMod, CycleMod, EggRecordsMod, AreaEggSlotIdentityMod
 local STATE = {Slot = "Slot", Dropped = "Dropped", Carried = "Carried"}
 local skipUntil = {}
 local warnedModules = false
@@ -1116,6 +1116,7 @@ local function loadEggModules()
     pcall(function() AssetsMod = require(RS.Data.Assets) end)
     pcall(function() CycleMod = require(RS.Shared.Util.AreaEggCycle) end)
     pcall(function() EggRecordsMod = require(RS.Shared.Util.EggRecords) end)
+    pcall(function() AreaEggSlotIdentityMod = require(RS.Shared.Util.AreaEggSlotIdentity) end)
     pcall(function()
         local T = require(RS.Shared.Types.AreaEggs)
         if T and type(T.States) == "table" then
@@ -1436,17 +1437,48 @@ local function pingWait()
 end
 
 -- ស្នើយក Egg (Unequip Tool មុន ដូច Script គេ)
-local function requestCarry(uid)
-    if carryInflight then return end
+-- Carry request follows SenaHub's normal request shape, including the first-area
+-- slot identity when the selected egg is a slot-based egg.
+local function requestCarry(uid, rec)
+    if carryInflight then return false end
     carryInflight = true
-    pcall(function()
+    local accepted = false
+    local ok, err = pcall(function()
         local char = player.Character
+        local root = char and char:FindFirstChild("HumanoidRootPart")
         local hum = char and char:FindFirstChildOfClass("Humanoid")
+        if root then
+            pcall(function()
+                root.AssemblyLinearVelocity = Vector3.zero
+                root.AssemblyAngularVelocity = Vector3.zero
+            end)
+        end
         if hum then pcall(hum.UnequipTools, hum) end
         task.wait(pingWait())
-        EggWorldRemote.AskFieldEggCarry:InvokeServer({Uid = uid})
+
+        local args = {Uid = uid}
+        if rec and AreaEggSlotIdentityMod
+            and type(AreaEggSlotIdentityMod.LooksLikeFirstAreaUid) == "function"
+            and type(AreaEggSlotIdentityMod.SlotKey) == "function" then
+            local looksLikeSlot = false
+            pcall(function()
+                looksLikeSlot = AreaEggSlotIdentityMod.LooksLikeFirstAreaUid(uid) == true
+            end)
+            if looksLikeSlot and rec.AreaId ~= nil and rec.NestId ~= nil then
+                local keyOk, key = pcall(AreaEggSlotIdentityMod.SlotKey, rec.AreaId, rec.NestId)
+                if keyOk and key ~= nil then args.FirstAreaSlotKey = key end
+            end
+        end
+
+        local response, reason = EggWorldRemote.AskFieldEggCarry:InvokeServer(args)
+        accepted = response == true
+        if not accepted and type(reason) == "string" and reason ~= "" then
+            warn("[Auto Steal] Carry request refused: " .. reason)
+        end
     end)
     carryInflight = false
+    if not ok then warn("[Auto Steal] Carry request error: " .. tostring(err)) end
+    return accepted
 end
 
 local function autoStealStep()
@@ -1495,7 +1527,7 @@ local function autoStealStep()
     local ok, err = pcall(function()
         -- ទៅរក Egg ហើយស្នើ Carry មុនទៅដល់ (ក្នុង 8 studs)
         travel(root, rec.BottomCFrame + Vector3.new(0, 3, 0), function()
-            task.spawn(requestCarry, uid)
+            task.spawn(requestCarry, uid, rec)
         end)
 
         -- ស្នើម្តងទៀតរហូតដល់បញ្ជាក់ថាបានយក (ពី record)
@@ -1506,7 +1538,7 @@ local function autoStealStep()
                 break
             end
             if not carryInflight then
-                task.spawn(requestCarry, uid)
+                task.spawn(requestCarry, uid, rec)
             end
             task.wait(0.1)
         end
