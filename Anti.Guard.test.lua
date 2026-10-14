@@ -17,6 +17,9 @@ local RETURN_TIME = 0.05 -- ល្បឿនត្រឡប់ទៅកន្ល�
 local GLITCH = true      -- true = Glitch (ញ័រលឿន) ពេលនៅ SafeZone ដើម្បីកុំឱ្យ Guard ដេញ
 local RETURN_BACK = true -- true = ត្រឡប់ទៅកន្លែងដើមវិញ
 local SHOW_LOADING = true -- true = បង្ហាញ Loading ពេញអេក្រង់ ពេលកំពុងទៅ SafeZone
+local STEAL_TIMEOUT = 8   -- Steal Egg: រង់ចាំ Confirm អតិបរមា (វិនាទី) បើលើសនេះ ឈប់ Glitch ហើយត្រឡប់
+local CONFIRM_DELAY = 0.4 -- Steal Egg: Glitch បន្តបន្ទាប់ពី Confirm បានបន្តិច ដើម្បីប្រាកដ
+local EGG_KEYWORD = "egg" -- ឈ្មោះ Egg ក្នុង Backpack/Character (ពាក្យដែលមាននៅក្នុងឈ្មោះ)
 local ACCENT_1 = Color3.fromRGB(140, 90, 255)
 local ACCENT_2 = Color3.fromRGB(60, 160, 255)
 local ON_COLOR = Color3.fromRGB(60, 220, 130)
@@ -136,9 +139,9 @@ end
 -- ============ Main UI (ថ្លាៗ) ============
 local MainFrame = Instance.new("CanvasGroup")
 MainFrame.Name = "MainFrame"
-MainFrame.Size = UDim2.new(0, 270, 0, 175)
+MainFrame.Size = UDim2.new(0, 270, 0, 247)
 MainFrame.AnchorPoint = Vector2.new(0.5, 0.5)
-MainFrame.Position = UDim2.new(0.3, 135, 0.3, 88)
+MainFrame.Position = UDim2.new(0.3, 135, 0.3, 124)
 MainFrame.GroupTransparency = 1
 MainFrame.BackgroundColor3 = Color3.fromRGB(14, 14, 24)
 MainFrame.BackgroundTransparency = 0.25
@@ -281,6 +284,57 @@ Status.Font = Enum.Font.Gotham
 Status.TextSize = 11
 Status.TextXAlignment = Enum.TextXAlignment.Left
 Status.Parent = MainFrame
+
+-- ===== Card ទី២: Steal Egg =====
+local StealBtn = Instance.new("TextButton")
+StealBtn.Name = "StealEggBtn"
+StealBtn.Size = UDim2.new(1, -28, 0, 62)
+StealBtn.Position = UDim2.new(0, 14, 0, 138)
+StealBtn.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+StealBtn.BackgroundTransparency = 0.9
+StealBtn.Text = ""
+StealBtn.AutoButtonColor = false
+StealBtn.Parent = MainFrame
+corner(StealBtn, UDim.new(0, 12))
+local stealStroke = stroke(StealBtn, OFF_COLOR, 1.5, 0.4)
+
+local StealTitle = Instance.new("TextLabel")
+StealTitle.Size = UDim2.new(1, -90, 0, 24)
+StealTitle.Position = UDim2.new(0, 14, 0, 10)
+StealTitle.BackgroundTransparency = 1
+StealTitle.Text = "Steal Egg"
+StealTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
+StealTitle.Font = Enum.Font.GothamBold
+StealTitle.TextSize = 16
+StealTitle.TextXAlignment = Enum.TextXAlignment.Left
+StealTitle.Parent = StealBtn
+
+local StealSub = Instance.new("TextLabel")
+StealSub.Size = UDim2.new(1, -90, 0, 18)
+StealSub.Position = UDim2.new(0, 14, 0, 34)
+StealSub.BackgroundTransparency = 1
+StealSub.Text = "Glitch at SafeZone until Egg confirmed"
+StealSub.TextColor3 = Color3.fromRGB(200, 200, 220)
+StealSub.Font = Enum.Font.Gotham
+StealSub.TextSize = 11
+StealSub.TextXAlignment = Enum.TextXAlignment.Left
+StealSub.Parent = StealBtn
+
+local StealSwitch = Instance.new("Frame")
+StealSwitch.Size = UDim2.new(0, 48, 0, 26)
+StealSwitch.Position = UDim2.new(1, -62, 0.5, -13)
+StealSwitch.BackgroundColor3 = OFF_COLOR
+StealSwitch.BorderSizePixel = 0
+StealSwitch.Parent = StealBtn
+corner(StealSwitch, UDim.new(1, 0))
+
+local StealKnob = Instance.new("Frame")
+StealKnob.Size = UDim2.new(0, 20, 0, 20)
+StealKnob.Position = UDim2.new(0, 3, 0.5, -10)
+StealKnob.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+StealKnob.BorderSizePixel = 0
+StealKnob.Parent = StealSwitch
+corner(StealKnob, UDim.new(1, 0))
 
 -- ===== Smooth Drag (អូសរលូន) =====
 local function makeDraggable(guiObject)
@@ -509,6 +563,7 @@ local function hideLoading()
 end
 
 local antiGuardActive = false
+local stealEggActive = false
 local currentTween = nil
 local busy = false
 
@@ -572,9 +627,46 @@ local function goTo(rootPart, cf, t)
     rootPart.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
 end
 
-local function runAntiGuard(rootPart, safeZone)
+-- ===== ពិនិត្យថា Egg ជារបស់យើង (Confirm) =====
+-- ចាប់យក Item ថ្មី (Tool/Model) ដែលលេចឡើងក្នុង Backpack ឬ Character បន្ទាប់ពីយក Egg
+local function collectEggItems()
+    local set = {}
+    local char = player.Character
+    local backpack = player:FindFirstChildOfClass("Backpack")
+
+    local function consider(inst)
+        if inst:IsA("Tool") or string.find(string.lower(inst.Name), EGG_KEYWORD, 1, true) then
+            set[inst] = true
+        end
+    end
+
+    if backpack then
+        for _, inst in ipairs(backpack:GetChildren()) do consider(inst) end
+    end
+    if char then
+        for _, inst in ipairs(char:GetDescendants()) do consider(inst) end
+    end
+    return set
+end
+
+local function eggConfirmed(snapshot)
+    for inst in pairs(collectEggItems()) do
+        if not snapshot[inst] then
+            return true, inst
+        end
+    end
+    return false
+end
+
+local function runAntiGuard(rootPart, safeZone, stealMode)
     busy = true
-    showLoading(TWEEN_TIME + STAY_TIME + RETURN_TIME)
+    if stealMode then
+        LoadSub.Text = "OLIVER v3 • Confirming Egg"
+        showLoading(3)
+    else
+        LoadSub.Text = "OLIVER v3 • Moving to SafeZone"
+        showLoading(TWEEN_TIME + STAY_TIME + RETURN_TIME)
+    end
 
     -- ចងចាំចម្ងាយ Camera ពីតួអង្គ ហើយបើកប្រព័ន្ធតាម Camera
     local cam = Workspace.CurrentCamera
@@ -592,13 +684,32 @@ local function runAntiGuard(rootPart, safeZone)
     local origin = rootPart.CFrame
     local target = safeZone.CFrame + Vector3.new(0, 3, 0)
 
+    -- Snapshot Item មុនទៅ (ដើម្បីដឹងថា Egg ថ្មីណាជារបស់យើង)
+    local snapshot = stealMode and collectEggItems() or nil
+    local confirmed = false
+    local nextCheck = 0
+
     -- ១. ទៅ SafeZone លឿន (ដូច Teleport)
     goTo(rootPart, target, TWEEN_TIME)
 
     -- ២. នៅ SafeZone + Glitch (ញ័រលឿន)
+    --    Anti Guard: Glitch ក្នុង STAY_TIME
+    --    Steal Egg: Glitch រហូតទាល់តែ Confirm Egg (ឬអស់ STEAL_TIMEOUT)
+    local limit = stealMode and STEAL_TIMEOUT or STAY_TIME
     local t0 = os.clock()
-    while os.clock() - t0 < STAY_TIME do
+    while os.clock() - t0 < limit do
         if not rootPart.Parent then break end
+
+        if stealMode and not confirmed and os.clock() >= nextCheck then
+            nextCheck = os.clock() + 0.1
+            local ok, inst = eggConfirmed(snapshot)
+            if ok then
+                confirmed = true
+                limit = (os.clock() - t0) + CONFIRM_DELAY
+                print("[Steal Egg] Egg confirmed: " .. inst.Name)
+            end
+        end
+
         if GLITCH then
             rootPart.CFrame = target * CFrame.new(math.random(-20, 20) / 10, 0, math.random(-20, 20) / 10)
         else
@@ -606,6 +717,10 @@ local function runAntiGuard(rootPart, safeZone)
         end
         rootPart.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
         task.wait()
+    end
+
+    if stealMode and not confirmed then
+        warn("[Steal Egg] Timeout: មិនបាន Confirm Egg (ពិនិត្យ EGG_KEYWORD)")
     end
 
     -- ៣. ត្រឡប់ទៅកន្លែងដើម
@@ -625,23 +740,45 @@ local function runAntiGuard(rootPart, safeZone)
     busy = false
 end
 
-AntiGuardBtn.MouseButton1Click:Connect(function()
-    antiGuardActive = not antiGuardActive
-    if antiGuardActive then
-        tween(Switch, 0.2, {BackgroundColor3 = ON_COLOR})
-        tween(Knob, 0.2, {Position = UDim2.new(1, -23, 0.5, -10)})
-        tween(btnStroke, 0.2, {Color = ON_COLOR})
-        Status.Text = "Status: ON"
-        Status.TextColor3 = ON_COLOR
-        print("[Anti Guard] Activated!")
+local function setCard(sw, knob, st, on)
+    if on then
+        tween(sw, 0.2, {BackgroundColor3 = ON_COLOR})
+        tween(knob, 0.2, {Position = UDim2.new(1, -23, 0.5, -10)})
+        tween(st, 0.2, {Color = ON_COLOR})
     else
-        tween(Switch, 0.2, {BackgroundColor3 = OFF_COLOR})
-        tween(Knob, 0.2, {Position = UDim2.new(0, 3, 0.5, -10)})
-        tween(btnStroke, 0.2, {Color = OFF_COLOR})
+        tween(sw, 0.2, {BackgroundColor3 = OFF_COLOR})
+        tween(knob, 0.2, {Position = UDim2.new(0, 3, 0.5, -10)})
+        tween(st, 0.2, {Color = OFF_COLOR})
+    end
+end
+
+local function refreshModes()
+    setCard(Switch, Knob, btnStroke, antiGuardActive)
+    setCard(StealSwitch, StealKnob, stealStroke, stealEggActive)
+    if antiGuardActive then
+        Status.Text = "Status: Anti Guard ON"
+        Status.TextColor3 = ON_COLOR
+    elseif stealEggActive then
+        Status.Text = "Status: Steal Egg ON"
+        Status.TextColor3 = ON_COLOR
+    else
         Status.Text = "Status: OFF"
         Status.TextColor3 = Color3.fromRGB(170, 170, 195)
-        print("[Anti Guard] Deactivated!")
     end
+end
+
+AntiGuardBtn.MouseButton1Click:Connect(function()
+    antiGuardActive = not antiGuardActive
+    if antiGuardActive then stealEggActive = false end -- ប្រើម្តងមួយ Mode
+    refreshModes()
+    print(antiGuardActive and "[Anti Guard] Activated!" or "[Anti Guard] Deactivated!")
+end)
+
+StealBtn.MouseButton1Click:Connect(function()
+    stealEggActive = not stealEggActive
+    if stealEggActive then antiGuardActive = false end
+    refreshModes()
+    print(stealEggActive and "[Steal Egg] Activated!" or "[Steal Egg] Deactivated!")
 end)
 
 -- មុខងារភ្ជាប់ Event ជាមួយ ProximityPrompt
@@ -651,7 +788,7 @@ local function setupPrompt(prompt)
             prompt:SetAttribute("UltimateHooked", true)
 
             prompt.Triggered:Connect(function(plr)
-                if plr == player and antiGuardActive then
+                if plr == player and (antiGuardActive or stealEggActive) then
                     print("[Anti Guard] Prompt Triggered! Teleporting to SafeZone...")
 
                     local character = player.Character
@@ -667,7 +804,7 @@ local function setupPrompt(prompt)
                         if safeZone then
                             if not busy then
                                 task.spawn(function()
-                                    local ok, err = pcall(runAntiGuard, rootPart, safeZone)
+                                    local ok, err = pcall(runAntiGuard, rootPart, safeZone, stealEggActive)
                                     if not ok then
                                         warn("[Anti Guard] Error: " .. tostring(err))
                                         camHoldCF = nil
