@@ -77,10 +77,10 @@ end
 
 -- ពន្លឺកញ្ចក់ពាក់កណ្ដាលខាងលើ (ថេរ)
 local function addGloss(parent, radius)
-    local f = new("Frame", {Size = UDim2.fromScale(1, 0.5), BackgroundColor3 = WHITE, BorderSizePixel = 0,
+    local f = new("Frame", {Size = UDim2.fromScale(1, 1), BackgroundColor3 = WHITE, BorderSizePixel = 0,
         ZIndex = 49, Active = false}, parent)
     corner(f, radius)
-    new("UIGradient", {Rotation = 90, Transparency = NumberSequence.new(0.86, 1)}, f)
+    new("UIGradient", {Rotation = 90, Transparency = NumberSequence.new({NSK(0, 0.84), NSK(0.5, 1), NSK(1, 1)})}, f)
 end
 
 -- ជួរពន្លឺរំកិលកាត់ (ដូចចំណាំងផ្លាត)
