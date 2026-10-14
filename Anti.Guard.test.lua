@@ -22,7 +22,8 @@ local CONFIRM_DELAY = 0.4 -- Steal Egg: Glitch បន្តបន្ទាប់
 local EGG_KEYWORD = "egg" -- ឈ្មោះ Egg ក្នុង Backpack/Character (ពាក្យដែលមាននៅក្នុងឈ្មោះ)
 local USE_FOREST = true   -- Steal Egg: ទៅ Forest (Egg ធ្លាក់) → Steal វិញ → ទៅ SafeZone
 local FOREST_NAME = "Forest" -- ឈ្មោះតំបន់ Forest ក្នុង Workspace (World.Areas.Forest)
-local FOREST_WAIT = 3        -- រង់ចាំ Egg ធ្លាក់ក្នុង Forest (វិនាទី)
+local FOREST_TWEEN = 0.04    -- ល្បឿន Tween ក្នុង Forest (លឿនដូច Anti Guard)
+local FOREST_WAIT = 3        -- រង់ចាំ Egg ធ្លាក់ក្នុង Forest អតិបរមា (វិនាទី)
 local FOREST_RADIUS = 80     -- ចម្ងាយស្វែងរក Prompt របស់ Egg ដែលធ្លាក់ (studs)
 local RESTEAL_TIMEOUT = 3    -- រង់ចាំ Confirm ពេល Steal វិញ (វិនាទី)
 local ACCENT_1 = Color3.fromRGB(140, 90, 255)
@@ -770,49 +771,92 @@ local function forestSequence(rootPart)
         return false
     end
 
-    -- ១. ទៅ Forest → Egg ធ្លាក់ដោយខ្លួនឯង
+    -- ១. ទៅ Forest ភ្លាម → Egg ធ្លាក់ដោយខ្លួនឯង
     LoadSub.Text = "OLIVER v3 • Dropping at Forest"
     local promptSnap = collectPrompts()
-    goTo(rootPart, forestCF, TWEEN_TIME)
+
+    -- ចាប់ Prompt ថ្មីភ្លាមៗពេលវាលេចឡើង (លឿនជាងស្កេនទាំង Workspace)
+    local newPrompts = {}
+    local conn = Workspace.DescendantAdded:Connect(function(inst)
+        if inst:IsA("ProximityPrompt") then
+            table.insert(newPrompts, inst)
+        end
+    end)
+
+    goTo(rootPart, forestCF, FOREST_TWEEN)
+
+    local function pickNear()
+        local best, bestDist = nil, FOREST_RADIUS
+        for _, pr in ipairs(newPrompts) do
+            if pr.Parent then
+                local pos = promptPosition(pr)
+                if pos then
+                    local d = (pos - forestCF.Position).Magnitude
+                    if d < bestDist then
+                        best, bestDist = pr, d
+                    end
+                end
+            end
+        end
+        return best
+    end
 
     local dropPrompt
     local t0 = os.clock()
+    local nextScan = 0
     while os.clock() - t0 < FOREST_WAIT do
-        if not rootPart.Parent then return false end
+        if not rootPart.Parent then
+            conn:Disconnect()
+            return false
+        end
         rootPart.CFrame = forestCF
         rootPart.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
-        dropPrompt = findDroppedPrompt(promptSnap, forestCF.Position)
+
+        dropPrompt = pickNear()
+        if not dropPrompt and os.clock() >= nextScan then
+            nextScan = os.clock() + 0.25
+            dropPrompt = findDroppedPrompt(promptSnap, forestCF.Position)
+        end
         if dropPrompt then break end
-        task.wait(0.1)
+        task.wait()
     end
+    conn:Disconnect()
+
     if not dropPrompt then
         warn("[Steal Egg] មិនឃើញ Prompt របស់ Egg ដែលធ្លាក់ក្នុង Forest")
         return false
     end
     print("[Steal Egg] Dropped egg prompt: " .. dropPrompt:GetFullName())
 
-    -- ២. Steal វិញ (ចុច Prompt លើ Egg ដែលទម្លាក់)
+    -- ២. Steal វិញភ្លាម (ទៅក្បែរតែពេលឆ្ងាយពេក)
     LoadSub.Text = "OLIVER v3 • Stealing again"
     local pos = promptPosition(dropPrompt)
-    if pos then
-        goTo(rootPart, CFrame.new(pos + Vector3.new(0, 3, 0)), TWEEN_TIME)
+    local reach = (dropPrompt.MaxActivationDistance or 10) - 1
+    if pos and (rootPart.Position - pos).Magnitude > reach then
+        goTo(rootPart, CFrame.new(pos + Vector3.new(0, 3, 0)), FOREST_TWEEN)
     end
 
     local eggSnap = collectEggItems()
     local hadEgg = hasEggByName()
+
+    fireEggPrompt(dropPrompt) -- ចុចភ្លាម
     local t1 = os.clock()
-    local nextFire = 0
+    local nextFire = os.clock() + 0.15
+    local nextCheck = 0
     while os.clock() - t1 < RESTEAL_TIMEOUT do
         if not rootPart.Parent then return false end
         if os.clock() >= nextFire then
-            nextFire = os.clock() + 0.6
+            nextFire = os.clock() + 0.15
             fireEggPrompt(dropPrompt)
         end
-        if eggConfirmed(eggSnap) or (not hadEgg and hasEggByName()) then
-            print("[Steal Egg] Re-steal OK")
-            return true
+        if os.clock() >= nextCheck then
+            nextCheck = os.clock() + 0.05
+            if eggConfirmed(eggSnap) or (not hadEgg and hasEggByName()) then
+                print("[Steal Egg] Re-steal OK")
+                return true
+            end
         end
-        task.wait(0.1)
+        task.wait()
     end
     warn("[Steal Egg] Re-steal timeout")
     return false
