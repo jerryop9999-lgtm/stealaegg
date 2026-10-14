@@ -17,15 +17,10 @@ local RETURN_TIME = 0.05 -- ល្បឿនត្រឡប់ទៅកន្ល�
 local GLITCH = true      -- true = Glitch (ញ័រលឿន) ពេលនៅ SafeZone ដើម្បីកុំឱ្យ Guard ដេញ
 local RETURN_BACK = true -- true = ត្រឡប់ទៅកន្លែងដើមវិញ
 local SHOW_LOADING = true -- true = បង្ហាញ Loading ពេញអេក្រង់ ពេលកំពុងទៅ SafeZone
-local STEAL_TIMEOUT = 8   -- Steal Egg: រង់ចាំ Confirm អតិបរមា (វិនាទី) បើលើសនេះ ឈប់ Glitch ហើយត្រឡប់
-local CONFIRM_DELAY = 0.4 -- Steal Egg: Glitch បន្តបន្ទាប់ពី Confirm បានបន្តិច ដើម្បីប្រាកដ
-local EGG_KEYWORD = "egg" -- ឈ្មោះ Egg ក្នុង Backpack/Character (ពាក្យដែលមាននៅក្នុងឈ្មោះ)
-local USE_FOREST = true   -- Steal Egg: ទៅ Forest (Egg ធ្លាក់) → Steal វិញ → ទៅ SafeZone
-local FOREST_NAME = "Forest" -- ឈ្មោះតំបន់ Forest ក្នុង Workspace (World.Areas.Forest)
-local FOREST_TWEEN = 0.04    -- ល្បឿន Tween ក្នុង Forest (លឿនដូច Anti Guard)
-local FOREST_WAIT = 3        -- រង់ចាំ Egg ធ្លាក់ក្នុង Forest អតិបរមា (វិនាទី)
-local FOREST_RADIUS = 80     -- ចម្ងាយស្វែងរក Prompt របស់ Egg ដែលធ្លាក់ (studs)
-local RESTEAL_TIMEOUT = 3    -- រង់ចាំ Confirm ពេល Steal វិញ (វិនាទី)
+local AUTO_STEAL_SPEED = 150        -- Auto Steal: ល្បឿនធ្វើដំណើរ (studs/វិនាទី) ធំ = លឿន តែប្រថុយ Anti-cheat ខ្ពស់
+local AUTO_STEAL_CARRY_TIMEOUT = 3  -- រង់ចាំបញ្ជាក់ថាបានយក Egg (វិនាទី) បើអស់ពេលរំលង Egg នោះ
+local AUTO_STEAL_PRIORITY = "Nearest" -- "Nearest" = ជិតបំផុត, "Rarity" = កម្រជាងមុន
+local AUTO_STEAL_RARITIES = {}      -- ទទេ = យកទាំងអស់ ឬដាក់ឧ. {"Legendary", "Mythic"}
 local ACCENT_1 = Color3.fromRGB(140, 90, 255)
 local ACCENT_2 = Color3.fromRGB(60, 160, 255)
 local ON_COLOR = Color3.fromRGB(60, 220, 130)
@@ -291,56 +286,62 @@ Status.TextSize = 11
 Status.TextXAlignment = Enum.TextXAlignment.Left
 Status.Parent = MainFrame
 
--- ===== Card ទី២: Steal Egg =====
-local StealBtn = Instance.new("TextButton")
-StealBtn.Name = "StealEggBtn"
-StealBtn.Size = UDim2.new(1, -28, 0, 62)
-StealBtn.Position = UDim2.new(0, 14, 0, 138)
-StealBtn.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-StealBtn.BackgroundTransparency = 0.9
-StealBtn.Text = ""
-StealBtn.AutoButtonColor = false
-StealBtn.Parent = MainFrame
-corner(StealBtn, UDim.new(0, 12))
-local stealStroke = stroke(StealBtn, OFF_COLOR, 1.5, 0.4)
+-- Card Switch (ប្រើម្តងទៀតសម្រាប់ Mode ផ្សេង)
+local function makeCard(titleText, subText, y)
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(1, -28, 0, 62)
+    btn.Position = UDim2.new(0, 14, 0, y)
+    btn.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    btn.BackgroundTransparency = 0.9
+    btn.Text = ""
+    btn.AutoButtonColor = false
+    btn.Parent = MainFrame
+    corner(btn, UDim.new(0, 12))
+    local st = stroke(btn, OFF_COLOR, 1.5, 0.4)
 
-local StealTitle = Instance.new("TextLabel")
-StealTitle.Size = UDim2.new(1, -90, 0, 24)
-StealTitle.Position = UDim2.new(0, 14, 0, 10)
-StealTitle.BackgroundTransparency = 1
-StealTitle.Text = "Steal Egg"
-StealTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
-StealTitle.Font = Enum.Font.GothamBold
-StealTitle.TextSize = 16
-StealTitle.TextXAlignment = Enum.TextXAlignment.Left
-StealTitle.Parent = StealBtn
+    local ttl = Instance.new("TextLabel")
+    ttl.Size = UDim2.new(1, -90, 0, 24)
+    ttl.Position = UDim2.new(0, 14, 0, 10)
+    ttl.BackgroundTransparency = 1
+    ttl.Text = titleText
+    ttl.TextColor3 = Color3.fromRGB(255, 255, 255)
+    ttl.Font = Enum.Font.GothamBold
+    ttl.TextSize = 16
+    ttl.TextXAlignment = Enum.TextXAlignment.Left
+    ttl.Parent = btn
 
-local StealSub = Instance.new("TextLabel")
-StealSub.Size = UDim2.new(1, -90, 0, 18)
-StealSub.Position = UDim2.new(0, 14, 0, 34)
-StealSub.BackgroundTransparency = 1
-StealSub.Text = "Glitch at SafeZone until Egg confirmed"
-StealSub.TextColor3 = Color3.fromRGB(200, 200, 220)
-StealSub.Font = Enum.Font.Gotham
-StealSub.TextSize = 11
-StealSub.TextXAlignment = Enum.TextXAlignment.Left
-StealSub.Parent = StealBtn
+    local sub = Instance.new("TextLabel")
+    sub.Size = UDim2.new(1, -90, 0, 18)
+    sub.Position = UDim2.new(0, 14, 0, 34)
+    sub.BackgroundTransparency = 1
+    sub.Text = subText
+    sub.TextColor3 = Color3.fromRGB(200, 200, 220)
+    sub.Font = Enum.Font.Gotham
+    sub.TextSize = 11
+    sub.TextXAlignment = Enum.TextXAlignment.Left
+    sub.Parent = btn
 
-local StealSwitch = Instance.new("Frame")
-StealSwitch.Size = UDim2.new(0, 48, 0, 26)
-StealSwitch.Position = UDim2.new(1, -62, 0.5, -13)
-StealSwitch.BackgroundColor3 = OFF_COLOR
-StealSwitch.BorderSizePixel = 0
-StealSwitch.Parent = StealBtn
-corner(StealSwitch, UDim.new(1, 0))
+    local sw = Instance.new("Frame")
+    sw.Size = UDim2.new(0, 48, 0, 26)
+    sw.Position = UDim2.new(1, -62, 0.5, -13)
+    sw.BackgroundColor3 = OFF_COLOR
+    sw.BorderSizePixel = 0
+    sw.Parent = btn
+    corner(sw, UDim.new(1, 0))
 
-local StealKnob = Instance.new("Frame")
-StealKnob.Size = UDim2.new(0, 20, 0, 20)
-StealKnob.Position = UDim2.new(0, 3, 0.5, -10)
-StealKnob.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-StealKnob.BorderSizePixel = 0
-StealKnob.Parent = StealSwitch
-corner(StealKnob, UDim.new(1, 0))
+    local kn = Instance.new("Frame")
+    kn.Size = UDim2.new(0, 20, 0, 20)
+    kn.Position = UDim2.new(0, 3, 0.5, -10)
+    kn.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    kn.BorderSizePixel = 0
+    kn.Parent = sw
+    corner(kn, UDim.new(1, 0))
+
+    return btn, sw, kn, st
+end
+
+local AutoBtn, AutoSwitch, AutoKnob, autoStroke = makeCard("Auto Steal", "Auto grab eggs → SafeZone", 138)
+
 
 -- ===== Smooth Drag (អូសរលូន) =====
 local function makeDraggable(guiObject)
@@ -569,7 +570,6 @@ local function hideLoading()
 end
 
 local antiGuardActive = false
-local stealEggActive = false
 local currentTween = nil
 local busy = false
 
@@ -633,246 +633,11 @@ local function goTo(rootPart, cf, t)
     rootPart.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
 end
 
--- ===== ពិនិត្យថា Egg ជារបស់យើង (Confirm) =====
--- ចាប់យក Item ថ្មី (Tool/Model) ដែលលេចឡើងក្នុង Backpack ឬ Character បន្ទាប់ពីយក Egg
-local function collectEggItems()
-    local set = {}
-    local char = player.Character
-    local backpack = player:FindFirstChildOfClass("Backpack")
-
-    local function consider(inst)
-        if inst:IsA("Tool") or string.find(string.lower(inst.Name), EGG_KEYWORD, 1, true) then
-            set[inst] = true
-        end
-    end
-
-    if backpack then
-        for _, inst in ipairs(backpack:GetChildren()) do consider(inst) end
-    end
-    if char then
-        for _, inst in ipairs(char:GetDescendants()) do consider(inst) end
-    end
-    return set
-end
-
-local function eggConfirmed(snapshot)
-    for inst in pairs(collectEggItems()) do
-        if not snapshot[inst] then
-            return true, inst
-        end
-    end
-    return false
-end
-
--- ===== Forest: Egg ធ្លាក់ → Steal វិញ =====
-local function hasEggByName()
-    local backpack = player:FindFirstChildOfClass("Backpack")
-    local char = player.Character
-    for _, container in ipairs({backpack, char}) do
-        if container then
-            for _, inst in ipairs(container:GetChildren()) do
-                if string.find(string.lower(inst.Name), EGG_KEYWORD, 1, true) then
-                    return true
-                end
-            end
-        end
-    end
-    return false
-end
-
-local function getForestCFrame()
-    local node
-    local world = Workspace:FindFirstChild("World")
-    local areas = world and world:FindFirstChild("Areas")
-    node = areas and areas:FindFirstChild(FOREST_NAME)
-
-    if not node then
-        local want = string.lower(FOREST_NAME)
-        for _, inst in ipairs(Workspace:GetDescendants()) do
-            if string.lower(inst.Name) == want and (inst:IsA("BasePart") or inst:IsA("Model") or inst:IsA("Folder")) then
-                node = inst
-                break
-            end
-        end
-    end
-    if not node then return nil end
-
-    local up = Vector3.new(0, 5, 0)
-    if node:IsA("BasePart") then
-        return node.CFrame + up
-    elseif node:IsA("Model") then
-        return node:GetPivot() + up
-    else
-        local sum, n = Vector3.new(0, 0, 0), 0
-        for _, d in ipairs(node:GetDescendants()) do
-            if d:IsA("BasePart") then
-                sum += d.Position
-                n += 1
-            end
-        end
-        if n > 0 then return CFrame.new(sum / n + up) end
-    end
-    return nil
-end
-
-local function collectPrompts()
-    local set = {}
-    for _, inst in ipairs(Workspace:GetDescendants()) do
-        if inst:IsA("ProximityPrompt") then set[inst] = true end
-    end
-    return set
-end
-
-local function promptPosition(prompt)
-    local par = prompt.Parent
-    if not par then return nil end
-    if par:IsA("BasePart") then return par.Position end
-    if par:IsA("Attachment") then return par.WorldPosition end
-    if par:IsA("Model") then return par:GetPivot().Position end
-    local part = par:FindFirstAncestorWhichIsA("BasePart")
-    return part and part.Position or nil
-end
-
--- រក Prompt ថ្មីដែលលេចឡើងក្បែរ Forest (Egg ដែលធ្លាក់)
-local function findDroppedPrompt(snapshot, nearPos)
-    local best, bestDist = nil, FOREST_RADIUS
-    for _, inst in ipairs(Workspace:GetDescendants()) do
-        if inst:IsA("ProximityPrompt") and not snapshot[inst] then
-            local pos = promptPosition(inst)
-            if pos then
-                local d = (pos - nearPos).Magnitude
-                if d < bestDist then
-                    best, bestDist = inst, d
-                end
-            end
-        end
-    end
-    return best
-end
-
-local function fireEggPrompt(prompt)
-    task.spawn(function()
-        if fireproximityprompt then
-            pcall(fireproximityprompt, prompt)
-        else
-            pcall(function()
-                prompt:InputHoldBegin()
-                task.wait((prompt.HoldDuration or 0) + 0.05)
-                prompt:InputHoldEnd()
-            end)
-        end
-    end)
-end
-
-local function forestSequence(rootPart)
-    local forestCF = getForestCFrame()
-    if not forestCF then
-        warn("[Steal Egg] រកមិនឃើញ Forest (ពិនិត្យ FOREST_NAME)")
-        return false
-    end
-
-    -- ១. ទៅ Forest ភ្លាម → Egg ធ្លាក់ដោយខ្លួនឯង
-    LoadSub.Text = "OLIVER v3 • Dropping at Forest"
-    local promptSnap = collectPrompts()
-
-    -- ចាប់ Prompt ថ្មីភ្លាមៗពេលវាលេចឡើង (លឿនជាងស្កេនទាំង Workspace)
-    local newPrompts = {}
-    local conn = Workspace.DescendantAdded:Connect(function(inst)
-        if inst:IsA("ProximityPrompt") then
-            table.insert(newPrompts, inst)
-        end
-    end)
-
-    goTo(rootPart, forestCF, FOREST_TWEEN)
-
-    local function pickNear()
-        local best, bestDist = nil, FOREST_RADIUS
-        for _, pr in ipairs(newPrompts) do
-            if pr.Parent then
-                local pos = promptPosition(pr)
-                if pos then
-                    local d = (pos - forestCF.Position).Magnitude
-                    if d < bestDist then
-                        best, bestDist = pr, d
-                    end
-                end
-            end
-        end
-        return best
-    end
-
-    local dropPrompt
-    local t0 = os.clock()
-    local nextScan = 0
-    while os.clock() - t0 < FOREST_WAIT do
-        if not rootPart.Parent then
-            conn:Disconnect()
-            return false
-        end
-        rootPart.CFrame = forestCF
-        rootPart.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
-
-        dropPrompt = pickNear()
-        if not dropPrompt and os.clock() >= nextScan then
-            nextScan = os.clock() + 0.25
-            dropPrompt = findDroppedPrompt(promptSnap, forestCF.Position)
-        end
-        if dropPrompt then break end
-        task.wait()
-    end
-    conn:Disconnect()
-
-    if not dropPrompt then
-        warn("[Steal Egg] មិនឃើញ Prompt របស់ Egg ដែលធ្លាក់ក្នុង Forest")
-        return false
-    end
-    print("[Steal Egg] Dropped egg prompt: " .. dropPrompt:GetFullName())
-
-    -- ២. Steal វិញភ្លាម (ទៅក្បែរតែពេលឆ្ងាយពេក)
-    LoadSub.Text = "OLIVER v3 • Stealing again"
-    local pos = promptPosition(dropPrompt)
-    local reach = (dropPrompt.MaxActivationDistance or 10) - 1
-    if pos and (rootPart.Position - pos).Magnitude > reach then
-        goTo(rootPart, CFrame.new(pos + Vector3.new(0, 3, 0)), FOREST_TWEEN)
-    end
-
-    local eggSnap = collectEggItems()
-    local hadEgg = hasEggByName()
-
-    fireEggPrompt(dropPrompt) -- ចុចភ្លាម
-    local t1 = os.clock()
-    local nextFire = os.clock() + 0.15
-    local nextCheck = 0
-    while os.clock() - t1 < RESTEAL_TIMEOUT do
-        if not rootPart.Parent then return false end
-        if os.clock() >= nextFire then
-            nextFire = os.clock() + 0.15
-            fireEggPrompt(dropPrompt)
-        end
-        if os.clock() >= nextCheck then
-            nextCheck = os.clock() + 0.05
-            if eggConfirmed(eggSnap) or (not hadEgg and hasEggByName()) then
-                print("[Steal Egg] Re-steal OK")
-                return true
-            end
-        end
-        task.wait()
-    end
-    warn("[Steal Egg] Re-steal timeout")
-    return false
-end
-
-local function runAntiGuard(rootPart, safeZone, stealMode)
+local function runAntiGuard(rootPart, safeZone)
     busy = true
-    if stealMode then
-        LoadSub.Text = "OLIVER v3 • Confirming Egg"
-        showLoading(4)
-    else
-        LoadSub.Text = "OLIVER v3 • Moving to SafeZone"
-        showLoading(TWEEN_TIME + STAY_TIME + RETURN_TIME)
-    end
+    showLoading(TWEEN_TIME + STAY_TIME + RETURN_TIME)
 
-    -- ចងចាំចម្ងាយ Camera ពីតួអង្គ ហើយបើកប្រព័ន្ធតាម Camera
+    -- ចងចាំចម្ងាយ Camera ពីតួអង្គ
     local cam = Workspace.CurrentCamera
     if cam then
         local off = cam.CFrame.Position - rootPart.Position
@@ -888,42 +653,13 @@ local function runAntiGuard(rootPart, safeZone, stealMode)
     local origin = rootPart.CFrame
     local target = safeZone.CFrame + Vector3.new(0, 3, 0)
 
-    -- Snapshot Item មុនទៅ (ដើម្បីដឹងថា Egg ថ្មីណាជារបស់យើង)
-    local snapshot = stealMode and collectEggItems() or nil
-    local confirmed = false
-    local nextCheck = 0
-
-    -- (Steal Egg) ទៅ Forest ទម្លាក់ Egg → Steal វិញ មុនទៅ SafeZone
-    if stealMode and USE_FOREST then
-        local okF, errF = pcall(forestSequence, rootPart)
-        if not okF then warn("[Steal Egg] Forest error: " .. tostring(errF)) end
-        LoadSub.Text = "OLIVER v3 • Confirming Egg"
-    end
-
     -- ១. ទៅ SafeZone លឿន (ដូច Teleport)
     goTo(rootPart, target, TWEEN_TIME)
 
     -- ២. នៅ SafeZone + Glitch (ញ័រលឿន)
-    --    Anti Guard: Glitch ក្នុង STAY_TIME
-    --    Steal Egg: Glitch រហូតទាល់តែ Confirm Egg (ឬអស់ STEAL_TIMEOUT)
-    local limit = stealMode and STEAL_TIMEOUT or STAY_TIME
     local t0 = os.clock()
-    while os.clock() - t0 < limit do
+    while os.clock() - t0 < STAY_TIME do
         if not rootPart.Parent then break end
-
-        if stealMode and not confirmed and os.clock() >= nextCheck then
-            nextCheck = os.clock() + 0.1
-            local ok, inst = eggConfirmed(snapshot)
-            if not ok and hasEggByName() then
-                ok, inst = true, {Name = "(Egg ក្នុង Inventory)"}
-            end
-            if ok then
-                confirmed = true
-                limit = (os.clock() - t0) + CONFIRM_DELAY
-                print("[Steal Egg] Egg confirmed: " .. inst.Name)
-            end
-        end
-
         if GLITCH then
             rootPart.CFrame = target * CFrame.new(math.random(-20, 20) / 10, 0, math.random(-20, 20) / 10)
         else
@@ -933,10 +669,6 @@ local function runAntiGuard(rootPart, safeZone, stealMode)
         task.wait()
     end
 
-    if stealMode and not confirmed then
-        warn("[Steal Egg] Timeout: មិនបាន Confirm Egg (ពិនិត្យ EGG_KEYWORD)")
-    end
-
     -- ៣. ត្រឡប់ទៅកន្លែងដើម
     if rootPart.Parent then
         rootPart.CFrame = target
@@ -944,7 +676,7 @@ local function runAntiGuard(rootPart, safeZone, stealMode)
             goTo(rootPart, origin, RETURN_TIME)
         end
     end
-    -- ត្រឡប់មកកន្លែងដើមហើយ → ដោះសោ Camera ឱ្យតាមតួអង្គវិញ
+    -- ដោះសោ Camera ឱ្យតាមតួអង្គវិញ
     camHoldCF = nil
     camFollowUntil = os.clock() + 1.5
     resetCamera()
@@ -954,6 +686,187 @@ local function runAntiGuard(rootPart, safeZone, stealMode)
     busy = false
 end
 
+-- ===== Auto Steal =====
+-- ប្រើ Module/Remote របស់ហ្គេមផ្ទាល់ (EggState, EggWorld) ដើម្បីរក Egg → ទៅយក → ទៅ SafeZone
+local autoStealActive = false
+local autoStealToken = 0
+local carrying = false
+local EggStateMod, EggWorldRemote, ResetWallMod, AssetsMod
+local skipUntil = {}
+local warnedModules = false
+local RARITY_RANK = {
+    Common = 1, Uncommon = 2, Rare = 3, Epic = 4, Legendary = 5,
+    Mythic = 6, Cosmic = 7, Secret = 8, Eternal = 9, Divine = 10
+}
+
+local function loadEggModules()
+    if EggStateMod and EggWorldRemote then return true end
+    local ok = pcall(function()
+        local RS = game:GetService("ReplicatedStorage")
+        EggStateMod = require(RS.Client.EggState)
+        EggWorldRemote = require(RS.Shared.Remotes).EggWorld
+    end)
+    if not ok or not EggStateMod or not EggWorldRemote then
+        EggStateMod, EggWorldRemote = nil, nil
+        return false
+    end
+    pcall(function()
+        local RS = game:GetService("ReplicatedStorage")
+        ResetWallMod = require(RS.Client.AreaEggResetWall)
+        AssetsMod = require(RS.Data.Assets)
+    end)
+    -- ដឹងថាកំពុងសែង Egg ឬអត់
+    pcall(function()
+        EggStateMod.CarryChanged:Connect(function(info)
+            carrying = type(info) == "table" and info.IsCarrying == true
+        end)
+    end)
+    return true
+end
+
+local function wallSealed()
+    if ResetWallMod and type(ResetWallMod.IsSealed) == "function" then
+        local ok, res = pcall(ResetWallMod.IsSealed)
+        return ok and res == true
+    end
+    return false
+end
+
+local function rarityOf(rec)
+    local name
+    pcall(function()
+        local info = AssetsMod and AssetsMod.Directory[rec.AssetCategory]
+        local r = info and info.Rarity
+        name = r and (r.DisplayName or r._id)
+    end)
+    return name
+end
+
+local function rarityAllowed(rec)
+    if #AUTO_STEAL_RARITIES == 0 then return true end
+    return table.find(AUTO_STEAL_RARITIES, rarityOf(rec)) ~= nil
+end
+
+local function pickTarget(fromPos)
+    local snapshot
+    pcall(function() snapshot = EggStateMod.ReadFieldEggs() end)
+    local records = snapshot and snapshot.Records
+    if not records then return nil end
+
+    local bestUid, bestRec, bestScore = nil, nil, -math.huge
+    for uid, rec in pairs(records) do
+        local state = rec.State
+        if (state == "Slot" or state == "Dropped") and rec.BottomCFrame
+            and (skipUntil[uid] or 0) < os.clock() and rarityAllowed(rec) then
+            local dist = (rec.BottomCFrame.Position - fromPos).Magnitude
+            local score = -dist
+            if AUTO_STEAL_PRIORITY == "Rarity" then
+                score = (RARITY_RANK[rarityOf(rec) or ""] or 0) * 100000 - dist
+            end
+            if score > bestScore then
+                bestUid, bestRec, bestScore = uid, rec, score
+            end
+        end
+    end
+    return bestUid, bestRec
+end
+
+local function getSafeCFrame()
+    local world = Workspace:FindFirstChild("World")
+    local areas = world and world:FindFirstChild("Areas")
+    local bounds = areas and areas:FindFirstChild("EggCarryBounds")
+    local zone = bounds and bounds:FindFirstChild("SafeZone")
+    if zone then return zone.CFrame end
+    return CFrame.new(544.76, 71.5, -416.48)
+end
+
+local function moveTo(rootPart, cf, speed)
+    local dist = (cf.Position - rootPart.Position).Magnitude
+    goTo(rootPart, cf, math.max(dist / speed, 0.05))
+end
+
+local function pingWait()
+    local ms = 0
+    pcall(function()
+        ms = game:GetService("Stats").Network.ServerStats.Ping:GetValue()
+    end)
+    return math.max(0.3, ms * 2.5 / 1000)
+end
+
+local function autoStealStep()
+    if busy then return end
+    local char = player.Character
+    local root = char and char:FindFirstChild("HumanoidRootPart")
+    if not root then return end
+
+    if not loadEggModules() then
+        if not warnedModules then
+            warnedModules = true
+            warn("[Auto Steal] ផ្ទុក EggState/Remotes មិនបាន (Executor ត្រូវតែគាំទ្រ require)")
+        end
+        task.wait(2)
+        return
+    end
+    if wallSealed() then return end
+
+    -- កំពុងសែង Egg → ទៅ SafeZone
+    if carrying then
+        busy = true
+        local ok, err = pcall(moveTo, root, getSafeCFrame() + Vector3.new(0, 3, 0), AUTO_STEAL_SPEED)
+        busy = false
+        if not ok then warn("[Auto Steal] Deliver error: " .. tostring(err)) end
+        local t0 = os.clock()
+        while autoStealActive and carrying and os.clock() - t0 < 4 do
+            task.wait(0.1)
+        end
+        return
+    end
+
+    -- រក Egg ថ្មី
+    local uid, rec = pickTarget(root.Position)
+    if not rec then
+        task.wait(0.4)
+        return
+    end
+
+    busy = true
+    local ok, err = pcall(function()
+        moveTo(root, rec.BottomCFrame + Vector3.new(0, 3, 0), AUTO_STEAL_SPEED)
+        local deadline = os.clock() + AUTO_STEAL_CARRY_TIMEOUT
+        while autoStealActive and not carrying and os.clock() < deadline do
+            task.wait(pingWait())
+            local okInvoke, res = pcall(function()
+                return EggWorldRemote.AskFieldEggCarry:InvokeServer({Uid = uid})
+            end)
+            if okInvoke and res == true then
+                task.wait(0.15) -- រង់ចាំ CarryChanged
+            else
+                task.wait(0.25)
+            end
+        end
+    end)
+    busy = false
+    if not ok then warn("[Auto Steal] Error: " .. tostring(err)) end
+    if not carrying then
+        skipUntil[uid] = os.clock() + 10 -- រំលង Egg នេះ 10 វិនាទី
+    end
+end
+
+local function autoStealLoop(token)
+    print("[Auto Steal] Started")
+    while autoStealActive and token == autoStealToken do
+        local ok, err = pcall(autoStealStep)
+        if not ok then
+            busy = false
+            warn("[Auto Steal] " .. tostring(err))
+            task.wait(1)
+        end
+        task.wait(0.1)
+    end
+    print("[Auto Steal] Stopped")
+end
+
+-- ===== Switch + Status =====
 local function setCard(sw, knob, st, on)
     if on then
         tween(sw, 0.2, {BackgroundColor3 = ON_COLOR})
@@ -966,14 +879,12 @@ local function setCard(sw, knob, st, on)
     end
 end
 
-local function refreshModes()
-    setCard(Switch, Knob, btnStroke, antiGuardActive)
-    setCard(StealSwitch, StealKnob, stealStroke, stealEggActive)
-    if antiGuardActive then
-        Status.Text = "Status: Anti Guard ON"
-        Status.TextColor3 = ON_COLOR
-    elseif stealEggActive then
-        Status.Text = "Status: Steal Egg ON"
+local function refreshStatus()
+    local parts = {}
+    if antiGuardActive then table.insert(parts, "Anti Guard") end
+    if autoStealActive then table.insert(parts, "Auto Steal") end
+    if #parts > 0 then
+        Status.Text = "Status: " .. table.concat(parts, " + ") .. " ON"
         Status.TextColor3 = ON_COLOR
     else
         Status.Text = "Status: OFF"
@@ -983,16 +894,19 @@ end
 
 AntiGuardBtn.MouseButton1Click:Connect(function()
     antiGuardActive = not antiGuardActive
-    if antiGuardActive then stealEggActive = false end -- ប្រើម្តងមួយ Mode
-    refreshModes()
+    setCard(Switch, Knob, btnStroke, antiGuardActive)
+    refreshStatus()
     print(antiGuardActive and "[Anti Guard] Activated!" or "[Anti Guard] Deactivated!")
 end)
 
-StealBtn.MouseButton1Click:Connect(function()
-    stealEggActive = not stealEggActive
-    if stealEggActive then antiGuardActive = false end
-    refreshModes()
-    print(stealEggActive and "[Steal Egg] Activated!" or "[Steal Egg] Deactivated!")
+AutoBtn.MouseButton1Click:Connect(function()
+    autoStealActive = not autoStealActive
+    autoStealToken += 1
+    setCard(AutoSwitch, AutoKnob, autoStroke, autoStealActive)
+    refreshStatus()
+    if autoStealActive then
+        task.spawn(autoStealLoop, autoStealToken)
+    end
 end)
 
 -- មុខងារភ្ជាប់ Event ជាមួយ ProximityPrompt
@@ -1002,7 +916,7 @@ local function setupPrompt(prompt)
             prompt:SetAttribute("UltimateHooked", true)
 
             prompt.Triggered:Connect(function(plr)
-                if plr == player and (antiGuardActive or stealEggActive) then
+                if plr == player and antiGuardActive then
                     print("[Anti Guard] Prompt Triggered! Teleporting to SafeZone...")
 
                     local character = player.Character
@@ -1018,7 +932,7 @@ local function setupPrompt(prompt)
                         if safeZone then
                             if not busy then
                                 task.spawn(function()
-                                    local ok, err = pcall(runAntiGuard, rootPart, safeZone, stealEggActive)
+                                    local ok, err = pcall(runAntiGuard, rootPart, safeZone)
                                     if not ok then
                                         warn("[Anti Guard] Error: " .. tostring(err))
                                         camHoldCF = nil
