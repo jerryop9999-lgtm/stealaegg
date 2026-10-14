@@ -21,12 +21,14 @@ local AUTO_STEAL_SPEED = 150        -- Auto Steal: ល្បឿនធ្វើ�
 local AUTO_STEAL_CARRY_TIMEOUT = 3  -- រង់ចាំបញ្ជាក់ថាបានយក Egg (វិនាទី) បើអស់ពេលរំលង Egg នោះ
 -- ការ Select របស់ Auto Steal (កែតាម UI "Auto Steal Filters")
 local AUTO_CFG = {
-    Priority = "Nearest", -- Nearest / Rarity / Value
-    Rarities = {},        -- set: ទទេ = យកទាំងអស់
+    Mode = "Tween",      -- Tween / Fly (ហោះតាមកម្ពស់) / Teleport (ភ្លាមៗ)
+    Priority = "Rarity", -- Rarity / Value / Weight / Nearest (ស្មើគ្នា → យកជិតជាង)
+    Rarities = {},       -- set: ទទេ = យកទាំងអស់
     Areas = {},
     Names = {},
     Mutations = {},
     MinValue = 0,
+    MinWeight = 0,
 }
 local RARITY_RANK = {
     Common = 1, Uncommon = 2, Rare = 3, Epic = 4, Legendary = 5,
@@ -459,37 +461,44 @@ do
         return #names .. " selected"
     end
 
-    local PriorityRow, PriorityLbl = makeRow(1)
-    local RarityRow, RarityLbl = makeRow(2)
-    local AreaRow, AreaLbl = makeRow(3)
-    local NameRow, NameLbl = makeRow(4)
-    local MutationRow, MutationLbl = makeRow(5)
+    local ModeRow, ModeLbl = makeRow(1)
+    local PriorityRow, PriorityLbl = makeRow(2)
+    local RarityRow, RarityLbl = makeRow(3)
+    local AreaRow, AreaLbl = makeRow(4)
+    local NameRow, NameLbl = makeRow(5)
+    local MutationRow, MutationLbl = makeRow(6)
 
-    -- Min Value (TextBox)
-    local ValueRow = Instance.new("Frame")
-    ValueRow.Size = UDim2.new(1, -6, 0, 38)
-    ValueRow.LayoutOrder = 6
-    ValueRow.BackgroundColor3 = WHITE
-    ValueRow.BackgroundTransparency = 0.9
-    ValueRow.Parent = Rows
-    corner(ValueRow, UDim.new(0, 10))
-    label(ValueRow, "Min Value", UDim2.new(0.5, 0, 1, 0), UDim2.new(0, 12, 0, 0), Enum.Font.GothamBold, 12)
-    local ValueBox = Instance.new("TextBox")
-    ValueBox.Size = UDim2.new(0.42, 0, 0, 26)
-    ValueBox.Position = UDim2.new(0.58, -8, 0.5, -13)
-    ValueBox.BackgroundColor3 = WHITE
-    ValueBox.BackgroundTransparency = 0.85
-    ValueBox.Text = "0"
-    ValueBox.PlaceholderText = "1k / 2.5m"
-    ValueBox.TextColor3 = WHITE
-    ValueBox.PlaceholderColor3 = Color3.fromRGB(170, 170, 195)
-    ValueBox.Font = Enum.Font.Gotham
-    ValueBox.TextSize = 12
-    ValueBox.ClearTextOnFocus = false
-    ValueBox.Parent = ValueRow
-    corner(ValueBox, UDim.new(0, 8))
+    -- Min Value / Min Weight (TextBox)
+    local function makeBoxRow(order, text, placeholder)
+        local row = Instance.new("Frame")
+        row.Size = UDim2.new(1, -6, 0, 38)
+        row.LayoutOrder = order
+        row.BackgroundColor3 = WHITE
+        row.BackgroundTransparency = 0.9
+        row.Parent = Rows
+        corner(row, UDim.new(0, 10))
+        label(row, text, UDim2.new(0.55, 0, 1, 0), UDim2.new(0, 12, 0, 0), Enum.Font.GothamBold, 12)
+        local box = Instance.new("TextBox")
+        box.Size = UDim2.new(0.38, 0, 0, 26)
+        box.Position = UDim2.new(0.62, -8, 0.5, -13)
+        box.BackgroundColor3 = WHITE
+        box.BackgroundTransparency = 0.85
+        box.Text = "0"
+        box.PlaceholderText = placeholder
+        box.TextColor3 = WHITE
+        box.PlaceholderColor3 = Color3.fromRGB(170, 170, 195)
+        box.Font = Enum.Font.Gotham
+        box.TextSize = 12
+        box.ClearTextOnFocus = false
+        box.Parent = row
+        corner(box, UDim.new(0, 8))
+        return box
+    end
+    local ValueBox = makeBoxRow(7, "Min Value", "1k / 2.5m")
+    local WeightBox = makeBoxRow(8, "Min Weight (kg)", "0")
 
     local function refreshRows()
+        ModeLbl.Text = "Steal Mode:  " .. AUTO_CFG.Mode
         PriorityLbl.Text = "Priority:  " .. AUTO_CFG.Priority
         RarityLbl.Text = "Rarity:  " .. summary(AUTO_CFG.Rarities)
         AreaLbl.Text = "Area:  " .. summary(AUTO_CFG.Areas)
@@ -666,7 +675,13 @@ do
     end)
 
     -- ---------- Row actions ----------
-    local priorities = {"Nearest", "Rarity", "Value"}
+    local modes = {"Tween", "Fly", "Teleport"}
+    ModeRow.MouseButton1Click:Connect(function()
+        local idx = table.find(modes, AUTO_CFG.Mode) or 1
+        AUTO_CFG.Mode = modes[idx % #modes + 1]
+        refreshRows()
+    end)
+    local priorities = {"Rarity", "Value", "Weight", "Nearest"}
     PriorityRow.MouseButton1Click:Connect(function()
         local idx = table.find(priorities, AUTO_CFG.Priority) or 1
         AUTO_CFG.Priority = priorities[idx % #priorities + 1]
@@ -694,14 +709,25 @@ do
             ValueBox.Text = tostring(AUTO_CFG.MinValue)
         end
     end)
+    WeightBox.FocusLost:Connect(function()
+        local v = tonumber(WeightBox.Text)
+        if v and v >= 0 then
+            AUTO_CFG.MinWeight = v
+        else
+            WeightBox.Text = tostring(AUTO_CFG.MinWeight)
+        end
+    end)
 
     ResetBtn.MouseButton1Click:Connect(function()
         for _, key in ipairs({"Rarities", "Areas", "Names", "Mutations"}) do
             for k in pairs(AUTO_CFG[key]) do AUTO_CFG[key][k] = nil end
         end
-        AUTO_CFG.Priority = "Nearest"
+        AUTO_CFG.Mode = "Tween"
+        AUTO_CFG.Priority = "Rarity"
         AUTO_CFG.MinValue = 0
+        AUTO_CFG.MinWeight = 0
         ValueBox.Text = "0"
+        WeightBox.Text = "0"
         refreshRows()
     end)
 
@@ -1064,16 +1090,21 @@ end
 local autoStealActive = false
 local autoStealToken = 0
 local carrying = false
-local EggStateMod, EggWorldRemote, ResetWallMod, AssetsMod
+local carryInflight = false
+local EggStateMod, EggWorldRemote, ResetWallMod, AssetsMod, CycleMod, EggRecordsMod
+local STATE = {Slot = "Slot", Dropped = "Dropped", Carried = "Carried"}
 local skipUntil = {}
 local warnedModules = false
+local SAFE_POS = Vector3.new(544.76, 71.5, -416.48) -- ទីតាំង Safe (ដូច Script គេ)
+local SAFE_RADIUS = 30                               -- ក្នុងរង្វង់នេះ = ដល់ Safe ហើយ
+local EARLY_CARRY_DISTANCE = 8                       -- ចម្ងាយចាប់ផ្តើមស្នើ Carry មុនទៅដល់
 local printedFields = false
 local warnedArea = false
 
 local function loadEggModules()
     if EggStateMod and EggWorldRemote then return true end
+    local RS = game:GetService("ReplicatedStorage")
     local ok = pcall(function()
-        local RS = game:GetService("ReplicatedStorage")
         EggStateMod = require(RS.Client.EggState)
         EggWorldRemote = require(RS.Shared.Remotes).EggWorld
     end)
@@ -1081,10 +1112,17 @@ local function loadEggModules()
         EggStateMod, EggWorldRemote = nil, nil
         return false
     end
+    pcall(function() ResetWallMod = require(RS.Client.AreaEggResetWall) end)
+    pcall(function() AssetsMod = require(RS.Data.Assets) end)
+    pcall(function() CycleMod = require(RS.Shared.Util.AreaEggCycle) end)
+    pcall(function() EggRecordsMod = require(RS.Shared.Util.EggRecords) end)
     pcall(function()
-        local RS = game:GetService("ReplicatedStorage")
-        ResetWallMod = require(RS.Client.AreaEggResetWall)
-        AssetsMod = require(RS.Data.Assets)
+        local T = require(RS.Shared.Types.AreaEggs)
+        if T and type(T.States) == "table" then
+            for k in pairs(STATE) do
+                if T.States[k] ~= nil then STATE[k] = T.States[k] end
+            end
+        end
     end)
     -- ដឹងថាកំពុងសែង Egg ឬអត់
     pcall(function()
@@ -1095,12 +1133,33 @@ local function loadEggModules()
     return true
 end
 
+-- បញ្ជាក់ Carry ពី record (ដូច Script គេ): State = Carried ហើយ CarrierUserId = យើង
+local function isMyCarry(uid)
+    local rec
+    pcall(function() rec = EggStateMod.ReadFieldEgg(uid) end)
+    return rec ~= nil and rec.State == STATE.Carried and rec.CarrierUserId == player.UserId
+end
+
 local function wallSealed()
+    if CycleMod and type(CycleMod.IsNightPhase) == "function" then
+        local ok, res = pcall(CycleMod.IsNightPhase, Workspace:GetServerTimeNow())
+        if ok and res == true then return true end
+    end
     if ResetWallMod and type(ResetWallMod.IsSealed) == "function" then
         local ok, res = pcall(ResetWallMod.IsSealed)
-        return ok and res == true
+        if ok and res == true then return true end
     end
     return false
+end
+
+local function weightOf(rec)
+    local w
+    pcall(function()
+        if EggRecordsMod and type(EggRecordsMod.WeightKgForScale) == "function" then
+            w = EggRecordsMod.WeightKgForScale(rec.AssetScale or 1)
+        end
+    end)
+    return tonumber(w)
 end
 
 local function rarityOf(rec)
@@ -1143,13 +1202,79 @@ local function eggValue(rec)
     return tonumber(v) or 0
 end
 
-local AREA_FIELDS = {"Area", "AreaId", "AreaName", "AreaKey", "AreaCategory", "SourceArea"}
+-- ស្គាល់ Area របស់ Egg: ១) ពី field ក្នុង record  ២) ពីទីតាំង (Position) ធៀបនឹង World.Areas.GuardAreas
+local areaBoxes = nil
+
+local function buildAreaBoxes()
+    local boxes = {}
+    local world = Workspace:FindFirstChild("World")
+    local areas = world and world:FindFirstChild("Areas")
+    local guard = areas and areas:FindFirstChild("GuardAreas")
+    if not guard then return nil end
+
+    for _, child in ipairs(guard:GetChildren()) do
+        local cf, size
+        if child:IsA("Model") then
+            local ok, c, sz = pcall(child.GetBoundingBox, child)
+            if ok then cf, size = c, sz end
+        elseif child:IsA("BasePart") then
+            cf, size = child.CFrame, child.Size
+        end
+        if cf then
+            table.insert(boxes, {name = child.Name, cf = cf, size = size})
+        end
+    end
+    if #boxes == 0 then return nil end
+
+    local names = {}
+    for _, b in ipairs(boxes) do table.insert(names, b.name) end
+    print("[Auto Steal] Areas detected: " .. table.concat(names, ", "))
+    return boxes
+end
+
+local function areaByPosition(pos)
+    areaBoxes = areaBoxes or buildAreaBoxes()
+    if not areaBoxes then return nil end
+
+    local best, bestScore = nil, math.huge
+    for _, a in ipairs(areaBoxes) do
+        local rel = a.cf:PointToObjectSpace(pos)
+        local half = a.size / 2
+        local inside = math.abs(rel.X) <= half.X and math.abs(rel.Z) <= half.Z
+        local d = (a.cf.Position - pos).Magnitude
+        if inside then d = d * 0.01 end -- ប្រើ Area ដែលមាន Egg នៅក្នុងជាមុន
+        if d < bestScore then
+            best, bestScore = a.name, d
+        end
+    end
+    return best
+end
+
+local AREA_FIELDS = {"AreaId", "Area", "AreaName", "AreaKey", "AreaCategory", "SourceArea"}
 local function areaOf(rec)
     for _, f in ipairs(AREA_FIELDS) do
         local v = rec[f]
         if type(v) == "string" then return v end
     end
+    if rec.BottomCFrame then
+        return areaByPosition(rec.BottomCFrame.Position)
+    end
     return nil
+end
+
+local function normName(n)
+    return (string.lower(tostring(n)):gsub("[%s_%-]", ""))
+end
+
+local function areaSelected(a)
+    local na = normName(a)
+    for k in pairs(AUTO_CFG.Areas) do
+        local nk = normName(k)
+        if nk == na or string.find(nk, na, 1, true) or string.find(na, nk, 1, true) then
+            return true
+        end
+    end
+    return false
 end
 
 local function selectedMutationIds()
@@ -1181,9 +1306,9 @@ local function passesFilters(rec, mutIds)
         if a == nil then
             if not warnedArea then
                 warnedArea = true
-                warn("[Auto Steal] Egg មិនមាន field Area (មើល Console: Egg record fields) → Area filter ត្រូវបានរំលង")
+                warn("[Auto Steal] រកមិនឃើញ Area របស់ Egg (World.Areas.GuardAreas) → Area filter ត្រូវបានរំលង")
             end
-        elseif not AUTO_CFG.Areas[a] then
+        elseif not areaSelected(a) then
             return false
         end
     end
@@ -1197,6 +1322,10 @@ local function passesFilters(rec, mutIds)
     end
     if AUTO_CFG.MinValue > 0 and eggValue(rec) < AUTO_CFG.MinValue then
         return false
+    end
+    if AUTO_CFG.MinWeight > 0 then
+        local w = weightOf(rec)
+        if not w or w < AUTO_CFG.MinWeight then return false end
     end
     return true
 end
@@ -1222,14 +1351,17 @@ local function pickTarget(fromPos)
     local bestUid, bestRec, bestScore = nil, nil, -math.huge
     for uid, rec in pairs(records) do
         local state = rec.State
-        if (state == "Slot" or state == "Dropped") and rec.BottomCFrame
+        if (state == STATE.Slot or state == STATE.Dropped) and rec.BottomCFrame
             and (skipUntil[uid] or 0) < os.clock() and passesFilters(rec, mutIds) then
             local dist = (rec.BottomCFrame.Position - fromPos).Magnitude
+            -- ស្មើគ្នា → យកជិតជាង (ដូច Script គេ)
             local score = -dist
             if AUTO_CFG.Priority == "Rarity" then
-                score = (RARITY_RANK[rarityOf(rec) or ""] or 0) * 100000 - dist
+                score = (RARITY_RANK[rarityOf(rec) or ""] or 0) * 1e6 - dist
             elseif AUTO_CFG.Priority == "Value" then
-                score = eggValue(rec) - dist * 0.001
+                score = eggValue(rec) - dist * 1e-6
+            elseif AUTO_CFG.Priority == "Weight" then
+                score = (weightOf(rec) or 0) - dist * 1e-6
             end
             if score > bestScore then
                 bestUid, bestRec, bestScore = uid, rec, score
@@ -1239,18 +1371,60 @@ local function pickTarget(fromPos)
     return bestUid, bestRec
 end
 
-local function getSafeCFrame()
-    local world = Workspace:FindFirstChild("World")
-    local areas = world and world:FindFirstChild("Areas")
-    local bounds = areas and areas:FindFirstChild("EggCarryBounds")
-    local zone = bounds and bounds:FindFirstChild("SafeZone")
-    if zone then return zone.CFrame end
-    return CFrame.new(544.76, 71.5, -416.48)
+local function getSafeCFrame(root)
+    local y = SAFE_POS.Y
+    pcall(function()
+        local params = RaycastParams.new()
+        params.FilterType = Enum.RaycastFilterType.Exclude
+        params.FilterDescendantsInstances = {player.Character}
+        local hit = Workspace:Raycast(Vector3.new(SAFE_POS.X, SAFE_POS.Y + 60, SAFE_POS.Z), Vector3.new(0, -120, 0), params)
+        if hit then y = hit.Position.Y + 3.2 end
+    end)
+    return CFrame.new(SAFE_POS.X, y, SAFE_POS.Z) * root.CFrame.Rotation
 end
 
-local function moveTo(rootPart, cf, speed)
-    local dist = (cf.Position - rootPart.Position).Magnitude
-    goTo(rootPart, cf, math.max(dist / speed, 0.05))
+local function inSafeArea(root)
+    local d = root.Position - SAFE_POS
+    return Vector2.new(d.X, d.Z).Magnitude <= SAFE_RADIUS and math.abs(d.Y) <= 18
+end
+
+local function legTime(a, b)
+    return math.max((a - b).Magnitude / AUTO_STEAL_SPEED, 0.03)
+end
+
+-- ធ្វើដំណើរតាម Mode: Tween (ត្រង់) / Fly (ឡើងកម្ពស់ → ទៅ → ចុះ) / Teleport (ភ្លាមៗ)
+-- onNear: ហៅម្តងពេលនៅក្នុងចម្ងាយ EARLY_CARRY_DISTANCE ពីគោលដៅ
+local function travel(root, cf, onNear)
+    local watcher
+    if onNear then
+        watcher = task.spawn(function()
+            while root.Parent do
+                if (root.Position - cf.Position).Magnitude <= EARLY_CARRY_DISTANCE then
+                    onNear()
+                    return
+                end
+                task.wait()
+            end
+        end)
+    end
+
+    local mode = AUTO_CFG.Mode
+    if mode == "Teleport" then
+        root.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+        root.CFrame = cf
+    elseif mode == "Fly" then
+        local from, to = root.Position, cf.Position
+        local cruiseY = math.max(from.Y, to.Y + 5, SAFE_POS.Y + 5)
+        local up = Vector3.new(from.X, cruiseY, from.Z)
+        local over = Vector3.new(to.X, cruiseY, to.Z)
+        goTo(root, CFrame.new(up), legTime(from, up))
+        goTo(root, CFrame.new(over), legTime(up, over))
+        goTo(root, cf, legTime(over, to))
+    else
+        goTo(root, cf, legTime(root.Position, cf.Position))
+    end
+
+    if watcher then pcall(task.cancel, watcher) end
 end
 
 local function pingWait()
@@ -1259,6 +1433,20 @@ local function pingWait()
         ms = game:GetService("Stats").Network.ServerStats.Ping:GetValue()
     end)
     return math.max(0.3, ms * 2.5 / 1000)
+end
+
+-- ស្នើយក Egg (Unequip Tool មុន ដូច Script គេ)
+local function requestCarry(uid)
+    if carryInflight then return end
+    carryInflight = true
+    pcall(function()
+        local char = player.Character
+        local hum = char and char:FindFirstChildOfClass("Humanoid")
+        if hum then pcall(hum.UnequipTools, hum) end
+        task.wait(pingWait())
+        EggWorldRemote.AskFieldEggCarry:InvokeServer({Uid = uid})
+    end)
+    carryInflight = false
 end
 
 local function autoStealStep()
@@ -1277,12 +1465,14 @@ local function autoStealStep()
     end
     if wallSealed() then return end
 
-    -- កំពុងសែង Egg → ទៅ SafeZone
+    -- កំពុងសែង Egg → ត្រឡប់ទៅ Safe
     if carrying then
-        busy = true
-        local ok, err = pcall(moveTo, root, getSafeCFrame() + Vector3.new(0, 3, 0), AUTO_STEAL_SPEED)
-        busy = false
-        if not ok then warn("[Auto Steal] Deliver error: " .. tostring(err)) end
+        if not inSafeArea(root) then
+            busy = true
+            local ok, err = pcall(travel, root, getSafeCFrame(root), nil)
+            busy = false
+            if not ok then warn("[Auto Steal] Deliver error: " .. tostring(err)) end
+        end
         local t0 = os.clock()
         while autoStealActive and carrying and os.clock() - t0 < 4 do
             task.wait(0.1)
@@ -1290,33 +1480,41 @@ local function autoStealStep()
         return
     end
 
-    -- រក Egg ថ្មី
+    -- រក Egg តាម Filter
     local uid, rec = pickTarget(root.Position)
     if not rec then
         task.wait(0.4)
         return
     end
 
+    print(string.format("[Auto Steal] Target: %s | %s | area=%s | %.0f studs | mode=%s",
+        nameOf(rec), tostring(rarityOf(rec) or "?"), tostring(areaOf(rec) or "?"),
+        (rec.BottomCFrame.Position - root.Position).Magnitude, AUTO_CFG.Mode))
+
     busy = true
     local ok, err = pcall(function()
-        moveTo(root, rec.BottomCFrame + Vector3.new(0, 3, 0), AUTO_STEAL_SPEED)
+        -- ទៅរក Egg ហើយស្នើ Carry មុនទៅដល់ (ក្នុង 8 studs)
+        travel(root, rec.BottomCFrame + Vector3.new(0, 3, 0), function()
+            task.spawn(requestCarry, uid)
+        end)
+
+        -- ស្នើម្តងទៀតរហូតដល់បញ្ជាក់ថាបានយក (ពី record)
         local deadline = os.clock() + AUTO_STEAL_CARRY_TIMEOUT
         while autoStealActive and not carrying and os.clock() < deadline do
-            task.wait(pingWait())
-            local okInvoke, res = pcall(function()
-                return EggWorldRemote.AskFieldEggCarry:InvokeServer({Uid = uid})
-            end)
-            if okInvoke and res == true then
-                task.wait(0.15) -- រង់ចាំ CarryChanged
-            else
-                task.wait(0.25)
+            if isMyCarry(uid) then
+                carrying = true
+                break
             end
+            if not carryInflight then
+                task.spawn(requestCarry, uid)
+            end
+            task.wait(0.1)
         end
     end)
     busy = false
     if not ok then warn("[Auto Steal] Error: " .. tostring(err)) end
     if not carrying then
-        skipUntil[uid] = os.clock() + 10 -- រំលង Egg នេះ 10 វិនាទី
+        skipUntil[uid] = os.clock() + 15 -- រំលង Egg នេះ 15 វិនាទី
     end
 end
 
