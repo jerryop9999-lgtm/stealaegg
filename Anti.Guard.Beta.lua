@@ -381,8 +381,12 @@ end)
 -- ===== Loading UI ពេញអេក្រង់ =====
 local LoadingGui = new("ScreenGui", {Name = "OliverLoading", ResetOnSpawn = false, IgnoreGuiInset = true,
     DisplayOrder = 999, ZIndexBehavior = Enum.ZIndexBehavior.Sibling}, guiParent)
+-- ពេញអេក្រង់ពិតប្រាកដ: មិនទុក Inset ណាមួយ (Notch/Safe Area/Top bar)
+pcall(function() LoadingGui.ScreenInsets = Enum.ScreenInsets.None end)
 
-local Loading = new("CanvasGroup", {Name = "Loading", Size = UDim2.fromScale(1, 1),
+-- Loading ធំជាងអេក្រង់ 200px គ្រប់ទិស (ចំកណ្ដាលដដែល) ដើម្បីគ្របគែមទាំងអស់ គ្មានគម្លាត
+local Loading = new("CanvasGroup", {Name = "Loading", AnchorPoint = Vector2.new(0.5, 0.5),
+    Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.new(1, 400, 1, 400),
     BackgroundColor3 = Color3.fromRGB(8, 8, 16), BackgroundTransparency = 0, BorderSizePixel = 0,
     GroupTransparency = 1, Visible = false}, LoadingGui)
 
