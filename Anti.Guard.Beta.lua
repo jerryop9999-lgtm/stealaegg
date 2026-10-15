@@ -385,10 +385,11 @@ local LoadingGui = new("ScreenGui", {Name = "OliverLoading", ResetOnSpawn = fals
 pcall(function() LoadingGui.ScreenInsets = Enum.ScreenInsets.None end)
 
 -- Loading ធំជាងអេក្រង់ 200px គ្រប់ទិស (ចំកណ្ដាលដដែល) ដើម្បីគ្របគែមទាំងអស់ គ្មានគម្លាត
-local Loading = new("CanvasGroup", {Name = "Loading", AnchorPoint = Vector2.new(0.5, 0.5),
+-- ប្រើ Frame ធម្មតា (មិនមែន CanvasGroup) ដើម្បីឱ្យអក្សរមុត មិនព្រិល
+local Loading = new("Frame", {Name = "Loading", AnchorPoint = Vector2.new(0.5, 0.5),
     Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.new(1, 400, 1, 400),
     BackgroundColor3 = Color3.fromRGB(8, 8, 16), BackgroundTransparency = 0, BorderSizePixel = 0,
-    GroupTransparency = 1, Visible = false}, LoadingGui)
+    Visible = false}, LoadingGui)
 
 local LoadBg = new("Frame", {Size = UDim2.fromScale(1, 1), BackgroundColor3 = WHITE, BorderSizePixel = 0,
     ZIndex = 0, Active = false}, Loading)
@@ -410,24 +411,30 @@ local ringGrad = new("UIGradient", {Color = ColorSequence.new(ACCENT_1, ACCENT_2
     NSK(0, 0), NSK(0.55, 0.85), NSK(1, 1),
 })}, ringStroke)
 
-local LoadLabel = label(Loading, "Loading", 20, Enum.Font.GothamBold, WHITE, center(30),
-    UDim2.fromOffset(240, 28), Enum.TextXAlignment.Center)
+local LoadLabel = label(Loading, "Loading", 26, Enum.Font.GothamBlack, WHITE, center(28),
+    UDim2.fromOffset(260, 34), Enum.TextXAlignment.Center)
 LoadLabel.AnchorPoint = Vector2.new(0.5, 0)
+LoadLabel.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+LoadLabel.TextStrokeTransparency = 0.45
 
-local LoadSub = label(Loading, "OLIVER v3 • Steal Egg", 13, Enum.Font.Gotham, Color3.fromRGB(180, 180, 205),
-    center(58), UDim2.fromOffset(260, 20), Enum.TextXAlignment.Center)
+local LoadSub = label(Loading, "OLIVER v3 • Steal Egg", 16, Enum.Font.GothamBold, Color3.fromRGB(235, 235, 255),
+    center(66), UDim2.fromOffset(300, 24), Enum.TextXAlignment.Center)
 LoadSub.AnchorPoint = Vector2.new(0.5, 0)
+LoadSub.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+LoadSub.TextStrokeTransparency = 0.55
 
-local BarTrack = new("Frame", {Size = UDim2.fromOffset(230, 6), AnchorPoint = Vector2.new(0.5, 0),
-    Position = center(90), BackgroundColor3 = WHITE, BackgroundTransparency = 0.85, BorderSizePixel = 0}, Loading)
+local BarTrack = new("Frame", {Size = UDim2.fromOffset(240, 8), AnchorPoint = Vector2.new(0.5, 0),
+    Position = center(102), BackgroundColor3 = WHITE, BackgroundTransparency = 0.85, BorderSizePixel = 0}, Loading)
 corner(BarTrack, UDim.new(1, 0))
 local BarFill = new("Frame", {Size = UDim2.new(0, 0, 1, 0), BackgroundColor3 = WHITE, BorderSizePixel = 0}, BarTrack)
 corner(BarFill, UDim.new(1, 0))
 gradient(BarFill, ACCENT_1, ACCENT_2, 0)
 
-local LoadPct = label(Loading, "0%", 12, Enum.Font.GothamBold, Color3.fromRGB(200, 200, 225),
-    center(104), UDim2.fromOffset(100, 18), Enum.TextXAlignment.Center)
+local LoadPct = label(Loading, "0%", 16, Enum.Font.GothamBold, WHITE,
+    center(120), UDim2.fromOffset(100, 22), Enum.TextXAlignment.Center)
 LoadPct.AnchorPoint = Vector2.new(0.5, 0)
+LoadPct.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+LoadPct.TextStrokeTransparency = 0.55
 
 local loadingToken = 0
 local loadingConn = nil
@@ -436,7 +443,6 @@ local function showLoading(duration)
     if not SHOW_LOADING then return end
     loadingToken += 1
     Loading.Visible = true
-    tween(Loading, 0.1, {GroupTransparency = 0})
 
     local startT = os.clock()
     BarFill.Size = UDim2.new(0, 0, 1, 0)
@@ -453,21 +459,13 @@ end
 local function hideLoading()
     if not SHOW_LOADING then return end
     loadingToken += 1
-    local token = loadingToken
     BarFill.Size = UDim2.new(1, 0, 1, 0)
     LoadPct.Text = "100%"
-    local t = TweenService:Create(Loading, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
-        {GroupTransparency = 1})
-    t:Play()
-    t.Completed:Connect(function()
-        if token == loadingToken then
-            Loading.Visible = false
-            if loadingConn then
-                loadingConn:Disconnect()
-                loadingConn = nil
-            end
-        end
-    end)
+    Loading.Visible = false
+    if loadingConn then
+        loadingConn:Disconnect()
+        loadingConn = nil
+    end
 end
 
 -- ===== ប្រព័ន្ធ Anti Guard & Camera =====
