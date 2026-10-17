@@ -23,7 +23,7 @@ local SAFE_RADIUS = 30
 ------------------------------------------------------------
 -- AUTO STEAL
 ------------------------------------------------------------
-local Steal = {enabled = false, speed = 300, status = "Idle", rarities = {}, avoidGuards = true, guardRadius = 70, mode = "High Speed Normal", flyHeight = 60, instantSpeed = 1000}
+local Steal = {enabled = false, speed = 300, status = "Idle", rarities = {}, avoidGuards = true, guardRadius = 70, mode = "High Speed Normal", flyHeight = 60, holdSeconds = 5, carrySpeed = 300, carrying = false, chaseVip = true, vip = {Secret = true, Eternal = true, Divine = true}, instantSpeed = 1000}
 local RARITIES = {"Common","Uncommon","Rare","Epic","Legendary","Mythic","Cosmic","Secret","Eternal","Divine"}
 
 -- ឈ្មោះ rarity របស់ស៊ុត (ដូច Sena: Assets.Directory[AssetCategory].Rarity)
@@ -31,6 +31,10 @@ local function rarityOf(rec)
 	local a = Assets.Directory[rec.AssetCategory]
 	local r = a and a.Rarity
 	return r and (r.DisplayName or r._id) or "Unknown"
+end
+
+local function isVip(rec)
+	return Steal.chaseVip and Steal.vip[rarityOf(rec)] == true
 end
 
 local function passesFilter(rec)
@@ -42,6 +46,17 @@ local token = 0
 local function getRoot()
 	local c = player.Character
 	return c and c:FindFirstChild("HumanoidRootPart"), c and c:FindFirstChildOfClass("Humanoid")
+end
+
+local function safeTarget()
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Exclude
+	params.FilterDescendantsInstances = {player.Character}
+	local hit = workspace:Raycast(SAFE_POS + Vector3.new(0, 60, 0), Vector3.new(0, -200, 0), params)
+	if hit then
+		return Vector3.new(SAFE_POS.X, hit.Position.Y + 3.2, SAFE_POS.Z)
+	end
+	return SAFE_POS
 end
 
 local function inSafe(root)
@@ -63,7 +78,7 @@ local function moveTo(pos, abort)
 			return true
 		end
 		local dt = RunService.Heartbeat:Wait()
-		local spd = (Steal.mode == "Instant Steal") and Steal.instantSpeed or Steal.speed
+		local spd = Steal.carrying and Steal.carrySpeed or ((Steal.mode == "Instant Steal") and Steal.instantSpeed or Steal.speed)
 		local step = math.min(dist, spd * dt)
 		root.CFrame = CFrame.new(root.Position + delta.Unit * step) * (root.CFrame - root.CFrame.Position)
 		root.AssemblyLinearVelocity = Vector3.zero
@@ -177,9 +192,9 @@ local function pickTarget(skip)
 	local best, bestRank, bestDist
 	for _, rec in ipairs(readRecords()) do
 		if (rec.State == AreaEggs.States.Slot or rec.State == AreaEggs.States.Dropped)
-		and not (skip and skip[rec.Uid]) and passesFilter(rec) then
+		and (isVip(rec) or (not (skip and skip[rec.Uid]) and passesFilter(rec))) then
 			local pos = eggPos(rec)
-			if pos and not nearGuard(pos) then
+			if pos and (isVip(rec) or not nearGuard(pos)) then
 				local rank = rarityRank(rec)
 				local d = (pos - root.Position).Magnitude
 				if not best or rank > bestRank or (rank == bestRank and d < bestDist) then
@@ -203,14 +218,21 @@ local function stealLoop(myToken)
 			task.wait(1)
 		else
 			local carried = myCarriedEgg()
+			Steal.carrying = carried ~= nil
 			if carried then
 				-- កំពុងកាន់ → យកទៅផ្ទះ ហើយបើធ្លាក់ពាក់កណ្តាលផ្លូវ បញ្ឈប់ភ្លាម
 				lastUid = carried.Uid
 				Steal.status = "Carrying home"
+				Steal.carrying = true
 				if not inSafe(root) then
-					travel(SAFE_POS, function() return stopped() or not myCarriedEgg() end)
+					travel(safeTarget(), function() return stopped() or not myCarriedEgg() end)
+				else
+					-- ដល់ safe area ហើយ: ឈរនៅកន្លែង រង់ចាំ server ទទួលស៊ុត (Sena: "Waiting for deposit")
+					Steal.status = "Waiting for deposit"
+					root.CFrame = CFrame.new(safeTarget()) * (root.CFrame - root.CFrame.Position)
+					root.AssemblyLinearVelocity = Vector3.zero
+					task.wait(0.1)
 				end
-				task.wait(0.3)
 			elseif wallSealed() then
 				Steal.status = "Egg reset - waiting"
 				task.wait(0.5)
@@ -241,18 +263,43 @@ local function stealLoop(myToken)
 						return not r or (r.State ~= AreaEggs.States.Slot and r.State ~= AreaEggs.States.Dropped)
 					end)
 					if arrived and not stopped() then
-						Steal.status = "Grabbing"
-						for _ = 1, 3 do
-							pcall(function()
-								eggWorld.AskFieldEggCarry:InvokeServer({Uid = target.Uid})
-							end)
-							task.wait(0.25)
-							if myCarriedEgg() then break end
+						-- ឈរនៅលើស៊ុតមួយរយៈ (Sena: StealHoldSeconds ~5s) ទើប server ឱ្យយក
+						local holdPos = pos + Vector3.new(0, 3, 0)
+						local holdUntil = os.clock() + Steal.holdSeconds
+						local lost = false
+						while os.clock() < holdUntil and not stopped() do
+							Steal.status = string.format("Securing egg (%.1fs)", holdUntil - os.clock())
+							local r = findByUid(target.Uid)
+							if not r or (r.State ~= AreaEggs.States.Slot and r.State ~= AreaEggs.States.Dropped) then
+								lost = true
+								break
+							end
+							local rt = getRoot()
+							if rt then
+								rt.CFrame = CFrame.new(holdPos)
+								rt.AssemblyLinearVelocity = Vector3.zero
+							end
+							task.wait(0.1)
+						end
+						if not lost and not stopped() then
+							Steal.status = "Grabbing"
+							local untilAt = os.clock() + 3
+							while os.clock() < untilAt and not stopped() and not myCarriedEgg() do
+								pcall(function()
+									eggWorld.AskFieldEggCarry:InvokeServer({Uid = target.Uid})
+								end)
+								task.wait(0.3)
+							end
 						end
 						if myCarriedEgg() then
 							lastUid = target.Uid
 						else
-							skip[target.Uid] = true -- ចាប់មិនបាន រំលងសិន
+							if not isVip(target) then
+								skip[target.Uid] = true -- ចាប់មិនបាន រំលងសិន (Secret/Eternal/Divine មិនរំលងទេ ព្យាយាមរហូត)
+							else
+								Steal.status = "Retrying " .. rarityOf(target)
+								task.wait(0.3)
+							end
 						end
 					end
 				end
@@ -271,6 +318,41 @@ function Steal.set(on)
 		task.spawn(stealLoop, t)
 	end
 end
+
+------------------------------------------------------------
+-- DIAGNOSTIC: កត់ត្រាមូលហេតុដែលស៊ុតធ្លាក់ / ត្រឡប់ទៅដើម
+------------------------------------------------------------
+local Diag = {text = "none yet", relocateAt = 0, ragdollAt = 0}
+
+local function dropReason(extra)
+	local now = os.clock()
+	local parts = {}
+	if now - Diag.relocateAt < 2 then table.insert(parts, "server Relocate") end
+	if now - Diag.ragdollAt < 2 then table.insert(parts, "ragdoll/hit") end
+	if wallSealed() then table.insert(parts, "egg reset wall") end
+	if #parts == 0 then table.insert(parts, "unknown (server decision)") end
+	Diag.text = extra .. ": " .. table.concat(parts, " + ")
+	print("[AutoSteal] " .. Diag.text)
+end
+
+pcall(function()
+	eggWorld.OwnerDropped.OnClientEvent:Connect(function() dropReason("Egg dropped") end)
+end)
+pcall(function()
+	Remotes.RigSync.Refresh.OnClientEvent:Connect(function() Diag.relocateAt = os.clock() end)
+end)
+local function watchRagdoll(c)
+	local hum = c and c:WaitForChild("Humanoid", 5)
+	if not hum then return end
+	hum.StateChanged:Connect(function(_, new)
+		if new == Enum.HumanoidStateType.Ragdoll or new == Enum.HumanoidStateType.FallingDown
+		or new == Enum.HumanoidStateType.PlatformStanding then
+			Diag.ragdollAt = os.clock()
+		end
+	end)
+end
+watchRagdoll(player.Character)
+player.CharacterAdded:Connect(watchRagdoll)
 
 ------------------------------------------------------------
 -- ANTI GUARD (ការពារ ragdoll / knockback ពី guard - ខាងកូនសំណាក់ client)
@@ -553,6 +635,17 @@ statusLabel.Font = Enum.Font.Gotham
 statusLabel.TextSize = 12
 statusLabel.Parent = content
 
+local dropLabel = Instance.new("TextLabel")
+dropLabel.Size = UDim2.new(1, 0, 0, 34)
+dropLabel.BackgroundTransparency = 1
+dropLabel.TextWrapped = true
+dropLabel.TextXAlignment = Enum.TextXAlignment.Left
+dropLabel.Text = "Last drop: none yet"
+dropLabel.TextColor3 = Color3.fromRGB(255, 180, 120)
+dropLabel.Font = Enum.Font.Gotham
+dropLabel.TextSize = 11
+dropLabel.Parent = content
+
 addToggle("Auto Steal", Steal.set)
 
 -- ជ្រើស Mode របស់ Auto Steal
@@ -572,7 +665,42 @@ modeBtn.MouseButton1Click:Connect(function()
 	Steal.mode = modes[mi]
 	modeBtn.Text = "Mode: " .. Steal.mode .. "  ▼"
 end)
+-- ពេលឈរនៅលើស៊ុតមុនយក (វិនាទី) - Sena លំនាំដើម 5
+local holds = {1, 2, 3, 5, 7, 10}
+local hi = 4
+local holdBtn = Instance.new("TextButton")
+holdBtn.Size = UDim2.new(1, 0, 0, 34)
+holdBtn.BackgroundColor3 = Color3.fromRGB(70, 60, 140)
+holdBtn.Text = "Hold: 5s  ▼"
+holdBtn.TextColor3 = Color3.new(1, 1, 1)
+holdBtn.Font = Enum.Font.GothamBold
+holdBtn.TextSize = 14
+holdBtn.Parent = content
+Instance.new("UICorner", holdBtn)
+holdBtn.MouseButton1Click:Connect(function()
+	hi = hi % #holds + 1
+	Steal.holdSeconds = holds[hi]
+	holdBtn.Text = "Hold: " .. Steal.holdSeconds .. "s  ▼"
+end)
+-- ល្បឿនពេលដឹកស៊ុតទៅផ្ទះ (ទាប = server ទទួលងាយជាង)
+local csp = {100, 150, 200, 300, 600}
+local ci = 4
+local carryBtn = Instance.new("TextButton")
+carryBtn.Size = UDim2.new(1, 0, 0, 34)
+carryBtn.BackgroundColor3 = Color3.fromRGB(70, 60, 140)
+carryBtn.Text = "Carry Speed: 300  ▼"
+carryBtn.TextColor3 = Color3.new(1, 1, 1)
+carryBtn.Font = Enum.Font.GothamBold
+carryBtn.TextSize = 14
+carryBtn.Parent = content
+Instance.new("UICorner", carryBtn)
+carryBtn.MouseButton1Click:Connect(function()
+	ci = ci % #csp + 1
+	Steal.carrySpeed = csp[ci]
+	carryBtn.Text = "Carry Speed: " .. Steal.carrySpeed .. "  ▼"
+end)
 addToggle("Anti Guard", Anti.set)
+addToggle("Chase Secret/Eternal/Divine", function(on) Steal.chaseVip = on end, true)
 addToggle("Avoid Guards", function(on) Steal.avoidGuards = on end, true)
 addToggle("Fly", Fly.set)
 
@@ -660,6 +788,7 @@ end
 task.spawn(function()
 	while gui.Parent do
 		statusLabel.Text = "Status: " .. Steal.status
+		dropLabel.Text = "Last drop: " .. Diag.text
 		task.wait(0.3)
 	end
 end)
