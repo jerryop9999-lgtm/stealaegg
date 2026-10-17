@@ -23,7 +23,7 @@ local SAFE_RADIUS = 30
 ------------------------------------------------------------
 -- AUTO STEAL
 ------------------------------------------------------------
-local Steal = {enabled = false, speed = 300, status = "Idle", rarities = {}}
+local Steal = {enabled = false, speed = 300, status = "Idle", rarities = {}, avoidGuards = true, guardRadius = 70, mode = "Normal", flyHeight = 60}
 local RARITIES = {"Common","Uncommon","Rare","Epic","Legendary","Mythic","Cosmic","Secret","Eternal","Divine"}
 
 -- ឈ្មោះ rarity របស់ស៊ុត (ដូច Sena: Assets.Directory[AssetCategory].Rarity)
@@ -77,6 +77,37 @@ local function wallSealed()
 	return ok and res == true
 end
 
+-- ជ្រើសផ្លូវធ្វើដំណើរតាម Mode: Normal / Fly / Zig-Zag
+local function travel(pos, abort)
+	local root = getRoot()
+	if not root then return false end
+	local mode = Steal.mode
+	if mode == "Fly" then
+		local alt = math.max(root.Position.Y, pos.Y) + Steal.flyHeight
+		return moveTo(Vector3.new(root.Position.X, alt, root.Position.Z), abort)
+			and moveTo(Vector3.new(pos.X, alt, pos.Z), abort)
+			and moveTo(pos, abort)
+	elseif mode == "Zig-Zag" then
+		local from = root.Position
+		local flat = Vector3.new(pos.X - from.X, 0, pos.Z - from.Z)
+		local len = flat.Magnitude
+		if len > 30 then
+			local dir = flat.Unit
+			local side = Vector3.new(-dir.Z, 0, dir.X)
+			local n = math.floor(len / 25)
+			for i = 1, n do
+				local base = from + dir * (len * i / (n + 1))
+				local wp = base + side * (i % 2 == 0 and 14 or -14)
+				if not moveTo(Vector3.new(wp.X, from.Y + (pos.Y - from.Y) * i / (n + 1), wp.Z), abort) then
+					return false
+				end
+			end
+		end
+		return moveTo(pos, abort)
+	end
+	return moveTo(pos, abort)
+end
+
 local function readRecords()
 	local ok, snap = pcall(EggState.ReadFieldEggs)
 	if ok and snap then return snap.Records or {} end
@@ -110,6 +141,34 @@ local function rarityRank(rec)
 	return 0
 end
 
+-- ពិនិត្យ guard នៅជិតស៊ុត (ដើម្បីរំលងស៊ុតដែលមាន guard យាម)
+local guardAreasFolder
+local function guardRoots()
+	if not (guardAreasFolder and guardAreasFolder.Parent) then
+		guardAreasFolder = nil
+		for _, d in ipairs(workspace:GetDescendants()) do
+			if d.Name == "GuardAreas" then guardAreasFolder = d break end
+		end
+	end
+	local list = {}
+	if guardAreasFolder then
+		for _, area in ipairs(guardAreasFolder:GetChildren()) do
+			local g = area:FindFirstChild("Guard")
+			local r = g and (g:FindFirstChild("HumanoidRootPart") or g:FindFirstChild("Collider") or (g:IsA("Model") and g.PrimaryPart))
+			if r then table.insert(list, r) end
+		end
+	end
+	return list
+end
+
+local function nearGuard(pos)
+	if not Steal.avoidGuards then return false end
+	for _, r in ipairs(guardRoots()) do
+		if (r.Position - pos).Magnitude <= Steal.guardRadius then return true end
+	end
+	return false
+end
+
 -- ជ្រើសស៊ុត: rarity ខ្ពស់បំផុតមុន (បន្ទាប់មកជិតបំផុត) តាម filter
 local function pickTarget(skip)
 	local root = getRoot()
@@ -119,7 +178,7 @@ local function pickTarget(skip)
 		if (rec.State == AreaEggs.States.Slot or rec.State == AreaEggs.States.Dropped)
 		and not (skip and skip[rec.Uid]) and passesFilter(rec) then
 			local pos = eggPos(rec)
-			if pos then
+			if pos and not nearGuard(pos) then
 				local rank = rarityRank(rec)
 				local d = (pos - root.Position).Magnitude
 				if not best or rank > bestRank or (rank == bestRank and d < bestDist) then
@@ -148,7 +207,7 @@ local function stealLoop(myToken)
 				lastUid = carried.Uid
 				Steal.status = "Carrying home"
 				if not inSafe(root) then
-					moveTo(SAFE_POS, function() return stopped() or not myCarriedEgg() end)
+					travel(SAFE_POS, function() return stopped() or not myCarriedEgg() end)
 				end
 				task.wait(0.3)
 			elseif wallSealed() then
@@ -175,7 +234,7 @@ local function stealLoop(myToken)
 				else
 					Steal.status = "Going to " .. rarityOf(target)
 					local pos = eggPos(target)
-					local arrived = pos and moveTo(pos + Vector3.new(0, 3, 0), function()
+					local arrived = pos and travel(pos + Vector3.new(0, 3, 0), function()
 						if stopped() then return true end
 						local r = findByUid(target.Uid)
 						return not r or (r.State ~= AreaEggs.States.Slot and r.State ~= AreaEggs.States.Dropped)
@@ -333,6 +392,48 @@ function Anti.set(on)
 end
 
 ------------------------------------------------------------
+-- FLY (ហោះ) - ទូរស័ព្ទ: joystick ដើរ + មើលទៅលើ/ក្រោមតាម camera, ប៊ូតុង ▲▼ | PC: Space ឡើង, Shift ចុះ
+------------------------------------------------------------
+local Fly = {enabled = false, speed = 60, up = false, down = false, bv = nil, conn = nil}
+
+local function flyStop()
+	Fly.enabled = false
+	if Fly.conn then Fly.conn:Disconnect() Fly.conn = nil end
+	if Fly.bv then Fly.bv:Destroy() Fly.bv = nil end
+end
+
+function Fly.set(on)
+	flyStop()
+	if not on then return end
+	Fly.enabled = true
+	Fly.conn = RunService.RenderStepped:Connect(function()
+		local root, hum = getRoot()
+		if not root or not hum or hum.Health <= 0 then return end
+		if not Fly.bv or Fly.bv.Parent ~= root then
+			if Fly.bv then Fly.bv:Destroy() end
+			local bv = Instance.new("BodyVelocity")
+			bv.MaxForce = Vector3.new(1e9, 1e9, 1e9)
+			bv.Velocity = Vector3.zero
+			bv.Parent = root
+			Fly.bv = bv
+		end
+		local cam = workspace.CurrentCamera
+		local move = hum.MoveDirection
+		local vel = Vector3.zero
+		if move.Magnitude > 0 then
+			-- ទៅមុខ = ទិសដៅ camera (រួមទាំងទិសឡើង/ចុះ)
+			local look = cam.CFrame.LookVector
+			local flat = Vector3.new(look.X, 0, look.Z)
+			local fwd = flat.Magnitude > 0 and move:Dot(flat.Unit) or 0
+			vel = move * Fly.speed + Vector3.new(0, look.Y * fwd * Fly.speed, 0)
+		end
+		if Fly.up or UIS:IsKeyDown(Enum.KeyCode.Space) then vel += Vector3.new(0, Fly.speed, 0) end
+		if Fly.down or UIS:IsKeyDown(Enum.KeyCode.LeftShift) then vel -= Vector3.new(0, Fly.speed, 0) end
+		Fly.bv.Velocity = vel
+	end)
+end
+
+------------------------------------------------------------
 -- UI
 ------------------------------------------------------------
 local old = player.PlayerGui:FindFirstChild("MenuUI")
@@ -378,8 +479,8 @@ local function makeDraggable(handle, target)
 end
 
 local main = Instance.new("Frame")
-main.Size = UDim2.new(0, 260, 0, 330)
-main.Position = UDim2.new(0.5, -130, 0.5, -165)
+main.Size = UDim2.new(0, 260, 0, 360)
+main.Position = UDim2.new(0.5, -130, 0.5, -180)
 main.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
 main.Parent = gui
 Instance.new("UICorner", main).CornerRadius = UDim.new(0, 10)
@@ -422,12 +523,13 @@ toggleBtn.MouseButton1Click:Connect(function()
 	end
 end)
 
-local function addToggle(name, callback)
-	local state = false
+local function addToggle(name, callback, default)
+	local state = default == true
 	local b = Instance.new("TextButton")
 	b.Size = UDim2.new(1, 0, 0, 34)
 	b.BackgroundColor3 = Color3.fromRGB(50, 50, 58)
-	b.Text = name .. ": OFF"
+	b.Text = name .. ": " .. (state and "ON" or "OFF")
+	b.BackgroundColor3 = state and Color3.fromRGB(40, 160, 90) or Color3.fromRGB(50, 50, 58)
 	b.TextColor3 = Color3.new(1, 1, 1)
 	b.Font = Enum.Font.Gotham
 	b.TextSize = 14
@@ -451,7 +553,73 @@ statusLabel.TextSize = 12
 statusLabel.Parent = content
 
 addToggle("Auto Steal", Steal.set)
+
+-- ជ្រើស Mode របស់ Auto Steal
+local modes = {"Normal", "Fly", "Zig-Zag"}
+local mi = 1
+local modeBtn = Instance.new("TextButton")
+modeBtn.Size = UDim2.new(1, 0, 0, 34)
+modeBtn.BackgroundColor3 = Color3.fromRGB(70, 60, 140)
+modeBtn.Text = "Mode: Normal  ▼"
+modeBtn.TextColor3 = Color3.new(1, 1, 1)
+modeBtn.Font = Enum.Font.GothamBold
+modeBtn.TextSize = 14
+modeBtn.Parent = content
+Instance.new("UICorner", modeBtn)
+modeBtn.MouseButton1Click:Connect(function()
+	mi = mi % #modes + 1
+	Steal.mode = modes[mi]
+	modeBtn.Text = "Mode: " .. Steal.mode .. "  ▼"
+end)
 addToggle("Anti Guard", Anti.set)
+addToggle("Avoid Guards", function(on) Steal.avoidGuards = on end, true)
+addToggle("Fly", Fly.set)
+
+-- ល្បឿន Fly + ប៊ូតុង ▲ ▼ (សម្រាប់ទូរស័ព្ទ)
+local row = Instance.new("Frame")
+row.Size = UDim2.new(1, 0, 0, 34)
+row.BackgroundTransparency = 1
+row.Parent = content
+
+local function rowBtn(text, xScale, wScale, color)
+	local b = Instance.new("TextButton")
+	b.Size = UDim2.new(wScale, -4, 1, 0)
+	b.Position = UDim2.new(xScale, 2, 0, 0)
+	b.BackgroundColor3 = color
+	b.Text = text
+	b.TextColor3 = Color3.new(1, 1, 1)
+	b.Font = Enum.Font.GothamBold
+	b.TextSize = 14
+	b.Parent = row
+	Instance.new("UICorner", b)
+	return b
+end
+
+local speedBtn = rowBtn("Speed: " .. Fly.speed, 0, 0.5, Color3.fromRGB(50, 50, 58))
+local speeds = {30, 60, 100, 150, 250}
+local si = 2
+speedBtn.MouseButton1Click:Connect(function()
+	si = si % #speeds + 1
+	Fly.speed = speeds[si]
+	speedBtn.Text = "Speed: " .. Fly.speed
+end)
+
+local upBtn = rowBtn("▲", 0.5, 0.25, Color3.fromRGB(60, 120, 255))
+local downBtn = rowBtn("▼", 0.75, 0.25, Color3.fromRGB(60, 120, 255))
+local function hold(btn, key)
+	btn.InputBegan:Connect(function(i)
+		if i.UserInputType == Enum.UserInputType.Touch or i.UserInputType == Enum.UserInputType.MouseButton1 then
+			Fly[key] = true
+		end
+	end)
+	btn.InputEnded:Connect(function(i)
+		if i.UserInputType == Enum.UserInputType.Touch or i.UserInputType == Enum.UserInputType.MouseButton1 then
+			Fly[key] = false
+		end
+	end)
+end
+hold(upBtn, "up")
+hold(downBtn, "down")
 
 -- Rarity filter (មិនជ្រើស = យកគ្រប់ rarity)
 local rtitle = Instance.new("TextLabel")
