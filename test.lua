@@ -69,6 +69,14 @@ local function moveTo(pos, abort)
 	end
 end
 
+-- ជញ្ជាំង reset ស៊ុត (ពេល reset ស៊ុតត្រូវត្រឡប់ទៅកន្លែងដើម) - ដូច Sena: AreaEggResetWall.IsSealed()
+local function wallSealed()
+	local ok, res = pcall(function()
+		return require(RS.Client.AreaEggResetWall).IsSealed()
+	end)
+	return ok and res == true
+end
+
 local function readRecords()
 	local ok, snap = pcall(EggState.ReadFieldEggs)
 	if ok and snap then return snap.Records or {} end
@@ -143,6 +151,9 @@ local function stealLoop(myToken)
 					moveTo(SAFE_POS, function() return stopped() or not myCarriedEgg() end)
 				end
 				task.wait(0.3)
+			elseif wallSealed() then
+				Steal.status = "Egg reset - waiting"
+				task.wait(0.5)
 			else
 				local target
 				-- ស៊ុតទើបធ្លាក់ ត្រូវរើសវិញមុនគេ (បើវានៅ Dropped)
