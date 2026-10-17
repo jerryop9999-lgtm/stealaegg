@@ -49,42 +49,73 @@ local function inSafe(root)
 	return Vector2.new(d.X, d.Z).Magnitude <= SAFE_RADIUS and math.abs(d.Y) <= 18
 end
 
--- ផ្លាស់ទីរលូនទៅទីតាំង (tween ដោយល្បឿន studs/វិនាទី)
-local function moveTo(pos)
-	local root = getRoot()
-	if not root then return false end
-	local dist = (root.Position - pos).Magnitude
-	local tw = TweenService:Create(root, TweenInfo.new(math.max(dist / Steal.speed, 0.05), Enum.EasingStyle.Linear), {CFrame = CFrame.new(pos)})
-	tw:Play()
-	tw.Completed:Wait()
-	root.AssemblyLinearVelocity = Vector3.zero
-	return true
+-- ផ្លាស់ទីទៅទីតាំងដោយល្បឿន studs/វិនាទី (អាចបញ្ឈប់ពាក់កណ្តាលផ្លូវបាន តាម abort())
+local RunService = game:GetService("RunService")
+local function moveTo(pos, abort)
+	while true do
+		local root = getRoot()
+		if not root then return false end
+		if abort and abort() then return false end
+		local delta = pos - root.Position
+		local dist = delta.Magnitude
+		if dist < 2 then
+			root.AssemblyLinearVelocity = Vector3.zero
+			return true
+		end
+		local dt = RunService.Heartbeat:Wait()
+		local step = math.min(dist, Steal.speed * dt)
+		root.CFrame = CFrame.new(root.Position + delta.Unit * step) * (root.CFrame - root.CFrame.Position)
+		root.AssemblyLinearVelocity = Vector3.zero
+	end
+end
+
+local function readRecords()
+	local ok, snap = pcall(EggState.ReadFieldEggs)
+	if ok and snap then return snap.Records or {} end
+	return {}
 end
 
 local function myCarriedEgg()
-	local ok, snap = pcall(EggState.ReadFieldEggs)
-	if not ok or not snap then return nil end
-	for _, rec in ipairs(snap.Records or {}) do
+	for _, rec in ipairs(readRecords()) do
 		if rec.State == AreaEggs.States.Carried and rec.CarrierUserId == player.UserId then
 			return rec
 		end
 	end
 end
 
--- រកស៊ុតជិតបំផុតដែលអាចលួចបាន (Slot / Dropped)
-local function pickTarget()
+local function findByUid(uid)
+	for _, rec in ipairs(readRecords()) do
+		if rec.Uid == uid then return rec end
+	end
+end
+
+local function eggPos(rec)
+	local cf = rec.BottomCFrame or rec.BoundsCFrame
+	return cf and cf.Position
+end
+
+local function rarityRank(rec)
+	local name = rarityOf(rec)
+	for i, n in ipairs(RARITIES) do
+		if n == name then return i end
+	end
+	return 0
+end
+
+-- ជ្រើសស៊ុត: rarity ខ្ពស់បំផុតមុន (បន្ទាប់មកជិតបំផុត) តាម filter
+local function pickTarget(skip)
 	local root = getRoot()
 	if not root then return nil end
-	local ok, snap = pcall(EggState.ReadFieldEggs)
-	if not ok or not snap then return nil end
-	local best, bestDist
-	for _, rec in ipairs(snap.Records or {}) do
-		if rec.State == AreaEggs.States.Slot or rec.State == AreaEggs.States.Dropped then
-			local cf = rec.BottomCFrame or rec.BoundsCFrame
-			if cf and passesFilter(rec) then
-				local d = (cf.Position - root.Position).Magnitude
-				if not bestDist or d < bestDist then
-					best, bestDist = rec, d
+	local best, bestRank, bestDist
+	for _, rec in ipairs(readRecords()) do
+		if (rec.State == AreaEggs.States.Slot or rec.State == AreaEggs.States.Dropped)
+		and not (skip and skip[rec.Uid]) and passesFilter(rec) then
+			local pos = eggPos(rec)
+			if pos then
+				local rank = rarityRank(rec)
+				local d = (pos - root.Position).Magnitude
+				if not best or rank > bestRank or (rank == bestRank and d < bestDist) then
+					best, bestRank, bestDist = rec, rank, d
 				end
 			end
 		end
@@ -93,35 +124,65 @@ local function pickTarget()
 end
 
 local function stealLoop(myToken)
-	while Steal.enabled and token == myToken do
+	local lastUid = nil   -- ស៊ុតដែលយើងទើបកាន់ (ដើម្បីរើសវិញបើធ្លាក់)
+	local skip = {}       -- ស៊ុតដែលចាប់មិនបាន ដកចេញបណ្តោះអាសន្ន
+	local function stopped() return not Steal.enabled or token ~= myToken end
+
+	while not stopped() do
 		local root, hum = getRoot()
 		if not root or not hum or hum.Health <= 0 then
 			Steal.status = "Waiting for character"
 			task.wait(1)
 		else
-			-- 1) កំពុងកាន់ស៊ុត → យកទៅផ្ទះ
-			if myCarriedEgg() then
+			local carried = myCarriedEgg()
+			if carried then
+				-- កំពុងកាន់ → យកទៅផ្ទះ ហើយបើធ្លាក់ពាក់កណ្តាលផ្លូវ បញ្ឈប់ភ្លាម
+				lastUid = carried.Uid
 				Steal.status = "Carrying home"
 				if not inSafe(root) then
-					moveTo(SAFE_POS)
+					moveTo(SAFE_POS, function() return stopped() or not myCarriedEgg() end)
 				end
-				task.wait(0.4)
+				task.wait(0.3)
 			else
-				-- 2) រកស៊ុតថ្មី
-				local rec = pickTarget()
-				if not rec then
+				local target
+				-- ស៊ុតទើបធ្លាក់ ត្រូវរើសវិញមុនគេ (បើវានៅ Dropped)
+				if lastUid then
+					local rec = findByUid(lastUid)
+					if rec and rec.State == AreaEggs.States.Dropped then
+						target = rec
+						Steal.status = "Egg dropped! Re-grabbing"
+					else
+						lastUid = nil -- ដឹកដល់ផ្ទះ ឬត្រូវគេយក
+					end
+				end
+				target = target or pickTarget(skip)
+
+				if not target then
+					skip = {}
 					Steal.status = "No egg found"
 					task.wait(1)
 				else
-					Steal.status = "Going to egg"
-					local pos = (rec.BottomCFrame or rec.BoundsCFrame).Position + Vector3.new(0, 3, 0)
-					moveTo(pos)
-					if Steal.enabled and token == myToken then
+					Steal.status = "Going to " .. rarityOf(target)
+					local pos = eggPos(target)
+					local arrived = pos and moveTo(pos + Vector3.new(0, 3, 0), function()
+						if stopped() then return true end
+						local r = findByUid(target.Uid)
+						return not r or (r.State ~= AreaEggs.States.Slot and r.State ~= AreaEggs.States.Dropped)
+					end)
+					if arrived and not stopped() then
 						Steal.status = "Grabbing"
-						pcall(function()
-							eggWorld.AskFieldEggCarry:InvokeServer({Uid = rec.Uid})
-						end)
-						task.wait(0.3)
+						for _ = 1, 3 do
+							pcall(function()
+								eggWorld.AskFieldEggCarry:InvokeServer({Uid = target.Uid})
+							end)
+							task.wait(0.25)
+							if myCarriedEgg() then break end
+						end
+						if myCarriedEgg() then
+							lastUid = target.Uid
+						else
+							skip[target.Uid] = true -- ចាប់មិនបាន រំលងសិន
+						end
 					end
 				end
 			end
@@ -351,7 +412,7 @@ addToggle("Anti Guard", Anti.set)
 local rtitle = Instance.new("TextLabel")
 rtitle.Size = UDim2.new(1, 0, 0, 20)
 rtitle.BackgroundTransparency = 1
-rtitle.Text = "Rarity Filter (ទទេ = ទាំងអស់)"
+rtitle.Text = "Rarity Filter (ទទេ = យកល្អបំផុតមុន)"
 rtitle.TextColor3 = Color3.fromRGB(200, 200, 210)
 rtitle.Font = Enum.Font.GothamBold
 rtitle.TextSize = 12
