@@ -23,7 +23,7 @@ local SAFE_RADIUS = 30
 ------------------------------------------------------------
 -- AUTO STEAL
 ------------------------------------------------------------
-local Steal = {enabled = false, speed = 300, status = "Idle", rarities = {}, avoidGuards = true, guardRadius = 70, mode = "Normal", flyHeight = 60}
+local Steal = {enabled = false, speed = 300, status = "Idle", rarities = {}, avoidGuards = true, guardRadius = 70, mode = "High Speed Normal", flyHeight = 60, instantSpeed = 1000}
 local RARITIES = {"Common","Uncommon","Rare","Epic","Legendary","Mythic","Cosmic","Secret","Eternal","Divine"}
 
 -- ឈ្មោះ rarity របស់ស៊ុត (ដូច Sena: Assets.Directory[AssetCategory].Rarity)
@@ -63,7 +63,8 @@ local function moveTo(pos, abort)
 			return true
 		end
 		local dt = RunService.Heartbeat:Wait()
-		local step = math.min(dist, Steal.speed * dt)
+		local spd = (Steal.mode == "Instant Steal") and Steal.instantSpeed or Steal.speed
+		local step = math.min(dist, spd * dt)
 		root.CFrame = CFrame.new(root.Position + delta.Unit * step) * (root.CFrame - root.CFrame.Position)
 		root.AssemblyLinearVelocity = Vector3.zero
 	end
@@ -82,7 +83,7 @@ local function travel(pos, abort)
 	local root = getRoot()
 	if not root then return false end
 	local mode = Steal.mode
-	if mode == "Fly" then
+	if mode == "High Speed (Fly)" then
 		local alt = math.max(root.Position.Y, pos.Y) + Steal.flyHeight
 		return moveTo(Vector3.new(root.Position.X, alt, root.Position.Z), abort)
 			and moveTo(Vector3.new(pos.X, alt, pos.Z), abort)
@@ -555,12 +556,12 @@ statusLabel.Parent = content
 addToggle("Auto Steal", Steal.set)
 
 -- ជ្រើស Mode របស់ Auto Steal
-local modes = {"Normal", "Fly", "Zig-Zag"}
-local mi = 1
+local modes = {"Instant Steal", "High Speed Normal", "High Speed (Fly)", "Zig-Zag"}
+local mi = 2
 local modeBtn = Instance.new("TextButton")
 modeBtn.Size = UDim2.new(1, 0, 0, 34)
 modeBtn.BackgroundColor3 = Color3.fromRGB(70, 60, 140)
-modeBtn.Text = "Mode: Normal  ▼"
+modeBtn.Text = "Mode: High Speed Normal  ▼"
 modeBtn.TextColor3 = Color3.new(1, 1, 1)
 modeBtn.Font = Enum.Font.GothamBold
 modeBtn.TextSize = 14
