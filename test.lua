@@ -72,7 +72,8 @@ local function resolve(record)
 		name   = asset and (asset.DisplayName or asset._id) or tostring(record and record.AssetCategory or "Unknown"),
 		rarity = rName,
 		color  = rarity and typeof(rarity.Color) == "Color3" and rarity.Color or Color3.new(1, 1, 1),
-		icon   = asset and type(asset.Icon) == "string" and asset.Icon or nil,
+		icon   = (asset and type(asset.Egg) == "table" and type(asset.Egg.Icon) == "string" and asset.Egg.Icon)
+			or (asset and type(asset.Icon) == "string" and asset.Icon) or nil,
 	}
 end
 
@@ -349,7 +350,7 @@ create("TextLabel", {
 	TextSize = 15,
 	TextXAlignment = Enum.TextXAlignment.Left,
 	TextColor3 = THEME.text,
-	Text = "🥚  Egg ESP",
+	Text = "Egg ESP",
 	Parent = titleBar,
 })
 local closeBtn = create("TextButton", {
@@ -359,7 +360,7 @@ local closeBtn = create("TextButton", {
 	Font = Enum.Font.GothamBold,
 	TextSize = 14,
 	TextColor3 = THEME.text,
-	Text = "✕",
+	Text = "X",
 	AutoButtonColor = true,
 	Parent = titleBar,
 }, {corner(8)})
@@ -541,14 +542,55 @@ local toggleBtn = create("TextButton", {
 	Position = UDim2.new(0, 20, 0.5, -24),
 	BackgroundColor3 = THEME.accent,
 	Font = Enum.Font.GothamBold,
-	TextSize = 22,
-	Text = "🥚",
+	Text = "",
 	AutoButtonColor = false,
 	Parent = gui,
 }, {
 	corner(24),
 	create("UIStroke", {Color = Color3.new(1, 1, 1), Thickness = 1.5, Transparency = 0.6}),
 })
+
+-- Egg icon drawn with UI (no emoji / image needed)
+create("Frame", {
+	Name = "EggIcon",
+	AnchorPoint = Vector2.new(0.5, 0.5),
+	Position = UDim2.fromScale(0.5, 0.5),
+	Size = UDim2.fromOffset(20, 26),
+	BackgroundColor3 = Color3.fromRGB(255, 244, 214),
+	BorderSizePixel = 0,
+	Active = false,
+	Parent = toggleBtn,
+}, {
+	create("UICorner", {CornerRadius = UDim.new(0.5, 0)}),
+	create("UIStroke", {Color = Color3.fromRGB(120, 90, 40), Thickness = 1.5}),
+})
+
+-- Use the game's real egg image on the toggle button (falls back to the drawn egg)
+do
+	local best, bestRank
+	for _, asset in pairs(Assets.Directory or {}) do
+		if type(asset) == "table" and type(asset.Egg) == "table" and type(asset.Egg.Icon) == "string" then
+			local r = asset.Rarity and (asset.Rarity.DisplayName or asset.Rarity._id)
+			local rank = RARITY_RANK[r] or 99
+			if not bestRank or rank < bestRank then best, bestRank = asset.Egg.Icon, rank end
+		end
+	end
+	if best then
+		create("ImageLabel", {
+			Name = "EggImage",
+			AnchorPoint = Vector2.new(0.5, 0.5),
+			Position = UDim2.fromScale(0.5, 0.5),
+			Size = UDim2.fromOffset(34, 34),
+			BackgroundTransparency = 1,
+			ScaleType = Enum.ScaleType.Fit,
+			Image = best,
+			Active = false,
+			Parent = toggleBtn,
+		})
+		local drawn = toggleBtn:FindFirstChild("EggIcon")
+		if drawn then drawn.Visible = false end
+	end
+end
 
 local function setMenu(open)
 	window.Visible = open
