@@ -204,7 +204,7 @@ end
 ------------------------------------------------------------
 -- ANTI GUARD (ការពារ ragdoll / knockback ពី guard - ខាងកូនសំណាក់ client)
 ------------------------------------------------------------
-local Anti = {enabled = false, orig = {}, conns = {}}
+local Anti = {enabled = false, orig = {}, conns = {}, gates = {}, scanned = false}
 
 local function recoverBody()
 	local c = player.Character
@@ -254,6 +254,40 @@ end
 function Anti.set(on)
 	Anti.enabled = on
 	if on then
+		-- (A) Guard ជាប់វ៉ៃ: បិទចម្ងាយវាយរបស់ guard (ដូច Sena: ResolveHitDistance = -inf)
+		pcall(function()
+			local Policy = require(RS.Shared.Modules.GuardAreas.GuardChasePolicy)
+			if Policy and type(Policy.ResolveHitDistance) == "function" and not Anti.orig.ResolveHitDistance then
+				local orig = Policy.ResolveHitDistance
+				Anti.orig.ResolveHitDistance = orig
+				Policy.ResolveHitDistance = function(...)
+					if Anti.enabled then return -math.huge end
+					return orig(...)
+				end
+			end
+		end)
+
+		-- (B) Guard attack handler (client): មិនឱ្យវាដំណើរការ ដូច្នេះមិនបាន report ការវាយទៅ server
+		if not Anti.scanned and type(getgc) == "function" then
+			Anti.scanned = true
+			task.spawn(function()
+				local ok, list = pcall(getgc, true)
+				if not ok or type(list) ~= "table" then Anti.scanned = false return end
+				for i, t in ipairs(list) do
+					if i % 20000 == 0 then RunService.Heartbeat:Wait() end
+					if type(t) == "table" and rawget(t, "_areaId") ~= nil
+					and type(rawget(t, "_attackHandler")) == "function" then
+						local orig = rawget(t, "_attackHandler")
+						table.insert(Anti.gates, {comp = t, orig = orig})
+						rawset(t, "_attackHandler", function(...)
+							if Anti.enabled then recoverBody() return end
+							return orig(...)
+						end)
+					end
+				end
+			end)
+		end
+
 		-- ចាប់ function ragdoll របស់ហ្គេម
 		for _, name in ipairs({"ApplyClientRagdoll", "Ragdoll", "TimedRagdoll", "TimedRagdollAsync"}) do
 			if type(Ragdoll[name]) == "function" and not Anti.orig[name] then
