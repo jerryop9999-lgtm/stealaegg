@@ -1,4 +1,4 @@
--- [[ SenaV4 Hub & OLIVER Auto Steal - Anti-Speed Detect Integrated Script ]] --
+-- [[ SenaV4 Hub & OLIVER Auto Steal - Final Anti-Speed & Takeoff Integrated Script ]] --
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ProximityPromptService = game:GetService("ProximityPromptService")
@@ -207,6 +207,7 @@ local connection, connection2
 local tbl3, v4, fn4
 
 local function fn5()
+	fn4 = nil
 	for i, child in ipairs(Workspace:GetChildren()) do
 		if child:IsA("BasePart") and (child.Name == name and child ~= v3) then
 			pcall(child.Destroy, child)
@@ -425,7 +426,7 @@ local function fn17(arg, arg2, arg3)
 					if ok3 and type(result3) == "function" then
 						local ok4, result4 = pcall(debug.getinfo, result3)
 						if ok4 then
-							local function fn18(arg4, arg5, arg6)
+							local function fn18_inner(arg4, arg5, arg6)
 								if v5 or type(arg4) ~= "table" or arg5 > 3 or arg6[arg4] then
 									return
 								end
@@ -439,7 +440,7 @@ local function fn17(arg, arg2, arg3)
 									n4 += 1
 									if n4 > 128 then break end
 									if type(v6) == "table" then
-										fn18(v6, arg5 + 1, arg6)
+										fn18_inner(v6, arg5 + 1, arg6)
 									end
 								end
 							end
@@ -447,7 +448,7 @@ local function fn17(arg, arg2, arg3)
 							for i = 1, result4.nups or 0, 1 do
 								local ok5, result5 = pcall(debug.getupvalue, result3, i)
 								if ok5 and type(result5) == "table" then
-									fn18(result5, 0, {})
+									fn18_inner(result5, 0, {})
 									if v5 then break end
 								end
 							end
@@ -508,7 +509,7 @@ local function fn19(arg, arg2, arg3)
 	local position = cFrame and cFrame.Position or nil
 	local vector = typeof(arg3) == "Vector3" and arg3 or Vector3.new(0, 0, 0)
 
-	local function fn20(arg4)
+	local function fn20_inner(arg4)
 		if type(arg4) == "table" then
 			rawset(arg4, "WalkSpeed", arg2)
 			if cFrame then
@@ -521,15 +522,15 @@ local function fn19(arg, arg2, arg3)
 	end
 
 	for i, field in ipairs(fields) do
-		fn20(rawget(arg, field))
+		fn20_inner(rawget(arg, field))
 	end
 
 	for k, v5 in pairs(rawget(arg, "SampleHistory") or {}) do
-		fn20(v5)
+		fn20_inner(v5)
 	end
 
 	for k, v5 in pairs(rawget(arg, "SafeGroundCheckpoints") or {}) do
-		fn20(v5)
+		fn20_inner(v5)
 	end
 
 	local value2 = rawget(arg, "Evidence")
@@ -548,7 +549,7 @@ local function fn19(arg, arg2, arg3)
 			value3.OriginPosition = position
 		end
 		value3.MaxHorizontalDistance = math.max(tonumber(value3.MaxHorizontalDistance) or 0, maxHorizontalSpeed * n4 + padding * 2)
-		fn20(value3.PreMovementSafeSample)
+		fn20_inner(value3.PreMovementSafeSample)
 	end
 
 	if rawget(arg, "CorrectionContext") == nil then
@@ -654,10 +655,10 @@ local function fn26()
 		local humanoid = character and character:FindFirstChildOfClass("Humanoid")
 		if not character or not humanoidRootPart or not humanoid then return end
 
-		local v5 = 600 -- Default speed input
-		fn15(character, v5 * headroom)
-		if not fn24(humanoid, humanoidRootPart, v5) then
-			fn23(humanoid, humanoidRootPart, v5)
+		local speedInput = 600
+		fn15(character, speedInput * headroom)
+		if not fn24(humanoid, humanoidRootPart, speedInput) then
+			fn23(humanoid, humanoidRootPart, speedInput)
 		end
 		fn11()
 	end)
@@ -722,7 +723,7 @@ local RARITY_COLORS = {
 	Divine = Color3.fromRGB(255, 245, 200),
 }
 local MODES = {
-	{name = "High Speed User Normal", desc = "Sena ground movement + Integrity Spoof"},
+	{name = "High Speed User Normal", desc = "Sena ground movement + Integrity Spoof + Takeoff"},
 }
 
 local Steal = {
@@ -875,14 +876,22 @@ local function groundYAt(x, z, char)
 	return hit and hit.Position.Y
 end
 
--- មុខងារ Travel ដែលបានភ្ជាប់ Sena Integrity Spoof (`fn24`) ដើម្បីការពារការចាប់ល្បឿន[span_6](start_span)[span_6](end_span)[span_7](start_span)[span_7](end_span)
+-- មុខងារ Travel ថ្មី៖ មានប្រព័ន្ធ Takeoff ងើបផុតกำแพง និងភ្ជាប់ Sena Integrity Spoofing (`fn23`, `fn24`)[span_6](start_span)[span_6](end_span)[span_7](start_span)[span_7](end_span)
 local function travel(pos, abort)
 	local speed = math.clamp(Steal.speed, MIN_SPEED, MAX_SPEED)
-	local slowUntil, lastMag, arrivedAt = 0, nil, nil
-	fn26() -- បើកដំណើរការ Sena Spoofing ពេលចាប់ផ្តើមរត់[span_8](start_span)[span_8](end_span)[span_9](start_span)[span_9](end_span)
+	local root, hum = getRoot()
+	if not root or not hum then return false end
 	
+	-- 1. បើកដំណើរការ និង Initialize State របស់ Sena មុនពេលរត់
+	fn26()
+	fn23(hum, root, speed)
+	
+	-- 2. ยกตัวขึ้น (Takeoff) 10 หน่วยเพื่อไม่ให้ชนขอบประตูหรือกำแพง
+	local takeoffPos = Vector3.new(pos.X, math.max(pos.Y, root.Position.Y + 10), pos.Z)
+	
+	local slowUntil, lastMag, arrivedAt = 0, nil, nil
 	while true do
-		local root, hum = getRoot()
+		root, hum = getRoot()
 		if not root or not hum or hum.Health <= 0 then fn27() return false end
 		if abort and abort() then fn27() return false end
 		
@@ -892,7 +901,7 @@ local function travel(pos, abort)
 		dt = math.max(math.min(dt, 0.15), 1 / 240)
 
 		local cur = root.Position
-		local delta = pos - cur
+		local delta = takeoffPos - cur
 		local mag = delta.Magnitude
 		local flat = Vector3.new(delta.X, 0, delta.Z)
 		local look = root.CFrame.LookVector
@@ -907,10 +916,10 @@ local function travel(pos, abort)
 		local step = curSpeed * dt
 
 		if mag <= math.max(step, 0.05) then
-			root.CFrame = CFrame.lookAt(pos, pos + face)
+			root.CFrame = CFrame.lookAt(takeoffPos, takeoffPos + face)
 			root.AssemblyLinearVelocity = Vector3.zero
 			
-			-- បញ្ជូន Velocity ស្ងប់ស្ងាត់ទៅកាន់ Sena Integrity[span_10](start_span)[span_10](end_span)
+			-- បញ្ជូន Velocity ស្ងប់ស្ងាត់ពេលដល់គោលដៅ[span_8](start_span)[span_8](end_span)
 			fn24(hum, root, speed, Vector3.new(0, 0, 0))
 			
 			arrivedAt = arrivedAt or os.clock()
@@ -918,24 +927,12 @@ local function travel(pos, abort)
 		else
 			arrivedAt = nil
 			local nextPos = cur + delta.Unit * math.min(step, mag)
-			
-			-- คำนวณ Travel Velocity ដើម្បីបន្លំ Anti-Cheat[span_11](start_span)[span_11](end_span)
 			local travelVel = (nextPos - cur) / dt
-			
-			if dt >= 1 / 30 then
-				local gy = groundYAt(nextPos.X, nextPos.Z, localPlayer.Character)
-				if gy then
-					local minY = gy + feetOffset(root, hum)
-					if nextPos.Y < minY then
-						nextPos = Vector3.new(nextPos.X, minY, nextPos.Z)
-					end
-				end
-			end
 			
 			root.CFrame = CFrame.lookAt(nextPos, nextPos + face)
 			root.AssemblyLinearVelocity = Vector3.zero
 			
-			-- អាប់ដេត Integrity Spoof ជាមួយ Velocity ជាក់ស្តែងក្នុងរាល់ Frame[span_12](start_span)[span_12](end_span)
+			-- អាប់ដេត Velocity Spoof តាមរាល់ Frame ដើម្បីបន្លំ Anti-Cheat[span_9](start_span)[span_9](end_span)
 			fn24(hum, root, speed, travelVel)
 		end
 	end
@@ -1116,7 +1113,7 @@ function Steal.set(on)
 end
 
 ------------------------------------------------------------
--- UI SETUP (Oliver Interface)[span_13](start_span)[span_13](end_span)
+-- UI SETUP (Oliver Interface)[span_10](start_span)[span_10](end_span)
 ------------------------------------------------------------
 local BG = Color3.fromRGB(16, 17, 24)
 local BG2 = Color3.fromRGB(22, 23, 32)
@@ -1545,4 +1542,4 @@ task.spawn(function()
 end)
 
 pcall(cfgLoad)
-print("[SenaV4 + OLIVER] Integrated Script with Anti-Speed Bypass Initialized!")
+print("[SenaV4 + OLIVER] Integrated Script with Takeoff & Anti-Speed Bypass Initialized!")
