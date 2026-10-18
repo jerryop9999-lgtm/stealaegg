@@ -1,4 +1,4 @@
--- [[ SenaV4 Hub & OLIVER Auto Steal - Fly Mod & Speed 1000 Delivery ]] --
+-- [[ SenaV4 Hub & OLIVER Auto Steal - Tween Delivery ]] --
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ProximityPromptService = game:GetService("ProximityPromptService")
@@ -150,519 +150,6 @@ if type(genv.__SenaV4AntiGuardCleanup) == "function" then
 	pcall(genv.__SenaV4AntiGuardCleanup)
 end
 
-genv.__SenaV4TweenRuntimeGeneration = (genv.__SenaV4TweenRuntimeGeneration or 0) + 1
-local tbl2 = {genv.__SenaV4TweenRuntimeGeneration, {KEY = "__SenaV4StealAnEggMovementSpoof", VERSION = 436, INTEGRITY_KEY = "__SenaV4StealAnEggIntegritySpoof", SIGNAL = "ClientCharacter: GetDebugSnapshot", HEADROOM = 1.35, CLAMP = 0.15, PADDING = 24, MULTIPLIER = 10, MIN_INPUT = 20, MAX_INPUT = 100, DEF_INPUT = 60, MIN_SPEED = 200, MAX_SPEED = 1000, DEF_SPEED = 350, FIELDS = {"LastObservedSample", "LastSample", "LastGoodSample", "LastGameplayTrustedSample", "LastValidatedSample", "LastValidatedGroundedSample", "LastConfirmedGroundSample", "CandidateGroundedSample"}}}
-tbl2.n = 2
-local v2
-_, v2 = tbl2[1], tbl2[2]
-local key = v2.KEY
-local version = v2.VERSION
-local integrityKey = v2.INTEGRITY_KEY
-local signal = v2.SIGNAL
-local headroom = v2.HEADROOM
-local clamp = v2.CLAMP
-local padding = v2.PADDING
-local multiplier = v2.MULTIPLIER
-local minInput = v2.MIN_INPUT
-local maxInput = v2.MAX_INPUT
-local defInput = v2.DEF_INPUT
-local minSpeed = v2.MIN_SPEED
-local maxSpeed = v2.MAX_SPEED
-local defSpeed = v2.DEF_SPEED
-local fields = v2.FIELDS
-local n = 60
-
-RunService.Heartbeat:Connect(function(deltaTime)
-	if deltaTime and deltaTime > 0 then
-		n = n * 0.9 + 1 / deltaTime * 0.1
-	end
-end)
-
-genv.__SenaV4NetPing = function()
-	local n2 = 0
-	pcall(function()
-		n2 = game:GetService("Stats").Network.ServerStatsItem["Data Ping"]:GetValue()
-	end)
-	return tonumber(n2) or 0
-end
-
--- Hover Pad System (Fly Mod) & Sena Integrity Core
-local n2, n3, name, str, v3 = 8, 1, "__SenaV4HoverPad", "SenaV4RuntimeOwner"
-local str2 = tostring(math.random(100000, 999999))
-local connection, connection2
-local tbl3, v4, fn4
-
-local function fn5()
-	fn4 = nil
-	for i, child in ipairs(Workspace:GetChildren()) do
-		if child:IsA("BasePart") and (child.Name == name and child ~= v3) then
-			pcall(child.Destroy, child)
-		end
-	end
-end
-
-local function fn6(arg)
-	if v3 then
-		if not v3.Parent then
-			return false
-		end
-	else
-		return false
-	end
-
-	local character = localPlayer.Character
-	local humanoidRootPart = character and character:FindFirstChild("HumanoidRootPart")
-	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
-
-	if not humanoidRootPart or not humanoid then
-		return false
-	end
-
-	local position = typeof(arg) == "Vector3" and arg or humanoidRootPart.Position
-	local n4 = humanoid.RigType == Enum.HumanoidRigType.R15 and humanoidRootPart.Size.Y * 0.5 + math.max(humanoid.HipHeight, 0.5) or humanoidRootPart.Size.Y * 0.5 + 2
-	v3.CFrame = CFrame.new(position.X, position.Y - n4 - n3 * 0.5 - 0.05, position.Z)
-	return true
-end
-
-local function fn7()
-	if (if v3 then not v3.Parent else not v3) or v3:GetAttribute(str) ~= str2 then
-		fn5()
-		if v3 and v3.Parent then
-			pcall(v3.Destroy, v3)
-		end
-
-		local part = Instance.new("Part")
-		part.Name = name
-		part:SetAttribute(str, str2)
-		part.Anchored = true
-		part.CanCollide = true
-		part.CanQuery = true
-		part.CanTouch = false
-		part.CastShadow = false
-		part.Transparency = 1
-		part.Size = Vector3.new(n2, n3, n2)
-		v3 = part
-		part.Parent = Workspace
-	end
-
-	fn6()
-
-	if not connection then
-		connection = RunService.PreSimulation:Connect(function()
-			if not fn6() then
-				fn7()
-			end
-		end)
-	end
-
-	if not connection2 then
-		connection2 = RunService.PostSimulation:Connect(function()
-			fn6()
-		end)
-	end
-end
-
-local function fn8()
-	if connection then
-		pcall(connection.Disconnect, connection)
-		connection = nil
-	end
-
-	if connection2 then
-		pcall(connection2.Disconnect, connection2)
-		connection2 = nil
-	end
-
-	if v3 then
-		pcall(v3.Destroy, v3)
-		v3 = nil
-	end
-
-	fn5()
-end
-
-fn8()
-
-local function fn9()
-	v4 = nil
-end
-
-local function fn10(rootPart, cFrame)
-	local tbl4 = {}
-	if rootPart and typeof(cFrame) == "CFrame" then
-		tbl4[1] = {}
-		tbl4[1].Character = localPlayer.Character
-		tbl4[1].RootPart = rootPart
-		tbl4[1].CFrame = cFrame
-		v4 = tbl4[1]
-	end
-end
-
-local function fn11()
-	local v5 = v4
-	if type(v5) ~= "table" or typeof(v5.CFrame) ~= "CFrame" then
-		return false
-	end
-
-	if localPlayer.Character ~= v5.Character then
-		v4 = nil
-		return false
-	else
-		if not v5.RootPart or not v5.RootPart.Parent then
-			v4 = nil
-			return false
-		end
-	end
-
-	fn7()
-	v5.RootPart.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
-	v5.RootPart.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
-	fn6(v5.CFrame.Position)
-	v5.RootPart.CFrame = v5.CFrame
-	fn6(v5.CFrame.Position)
-	return true
-end
-
-local function fn12()
-	local character = localPlayer.Character
-	local humanoidRootPart = character and character:FindFirstChild("HumanoidRootPart")
-
-	for k, v5 in pairs(tbl3) do
-		if type(v5) == "table" then
-			v5.cancelled = true
-		end
-	end
-
-	table.clear(tbl3)
-
-	if humanoidRootPart then
-		humanoidRootPart.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
-		humanoidRootPart.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
-	end
-
-	fn9()
-	fn8()
-end
-
-genv.__SenaV4TweenRuntimeCleanup = function()
-	for k, v5 in pairs(tbl3) do
-		if type(v5) == "table" then
-			v5.cancelled = true
-		end
-	end
-	table.clear(tbl3)
-	fn9()
-	fn8()
-end
-
-local function fn13()
-	return getgenv and getgenv() or _G
-end
-
-local function fn14()
-	local v5 = fn13()
-	local tbl4 = v5[key]
-
-	if type(tbl4) ~= "table" or tbl4.Version ~= version then
-		if type(tbl4) == "table" then
-			tbl4.Enabled = false
-		end
-
-		tbl4 = {Version = version, Installed = false, Enabled = false, Mode = "StateBaseline", Humanoid = nil, RootPart = nil, WalkSpeed = defSpeed}
-		v5[key] = tbl4
-	end
-
-	return tbl4
-end
-
-local function fn15(arg, arg2)
-	local v5 = fn14()
-	if not v5 then
-		return false
-	end
-	local humanoid = arg and arg:FindFirstChildOfClass("Humanoid")
-	local humanoidRootPart = arg and arg:FindFirstChild("HumanoidRootPart")
-	v5.Humanoid = humanoid
-	v5.RootPart = humanoidRootPart
-	v5.WalkSpeed = math.clamp(tonumber(arg2) or defSpeed, minSpeed, maxSpeed * headroom)
-	v5.Enabled = false
-	return humanoid ~= nil and humanoidRootPart ~= nil
-end
-
-local function fn16()
-	local v5 = fn13()[key]
-	if type(v5) == "table" then
-		v5.Enabled = false
-		v5.Humanoid = nil
-		v5.RootPart = nil
-	end
-end
-
-local function fn17(arg, arg2, arg3)
-	local v5
-	if type(getcallbackvalue) == "function" and type(debug) == "table" and type(debug.getupvalue) == "function" then
-		local signal2 = ReplicatedStorage:FindFirstChild("Packages") and ReplicatedStorage.Packages:FindFirstChild("Signal")
-		if signal2 then
-			local ok, result = pcall(require, signal2)
-			if ok and type(result) == "table" and type(result.Invoked) == "function" then
-				local ok2, result2 = pcall(result.Invoked, signal)
-				if ok2 and result2 then
-					local ok3, result3 = pcall(getcallbackvalue, result2, "OnInvoke")
-					if ok3 and type(result3) == "function" then
-						local ok4, result4 = pcall(debug.getinfo, result3)
-						if ok4 then
-							local function fn18_inner(arg4, arg5, arg6)
-								if v5 or type(arg4) ~= "table" or arg5 > 3 or arg6[arg4] then
-									return
-								end
-								arg6[arg4] = true
-								if rawget(arg4, "Player") == arg and rawget(arg4, "Character") == arg.Character and rawget(arg4, "Humanoid") == arg2 and rawget(arg4, "RootPart") == arg3 and type(rawget(arg4, "SampleHistory")) == "table" and type(rawget(arg4, "Evidence")) == "table" then
-									v5 = arg4
-									return
-								end
-								local n4 = 0
-								for k, v6 in pairs(arg4) do
-									n4 += 1
-									if n4 > 128 then break end
-									if type(v6) == "table" then
-										fn18_inner(v6, arg5 + 1, arg6)
-									end
-								end
-							end
-
-							for i = 1, result4.nups or 0, 1 do
-								local ok5, result5 = pcall(debug.getupvalue, result3, i)
-								if ok5 and type(result5) == "table" then
-									fn18_inner(result5, 0, {})
-									if v5 then break end
-								end
-							end
-						end
-					end
-				end
-			end
-		end
-	end
-
-	if not v5 and type(getgc) == "function" then
-		local ok, result = pcall(getgc, true)
-		if ok and type(result) == "table" then
-			for i, v6 in ipairs(result) do
-				if type(v6) == "table" and rawget(v6, "Player") == arg and rawget(v6, "Character") == arg.Character and rawget(v6, "Humanoid") == arg2 and rawget(v6, "RootPart") == arg3 and type(rawget(v6, "SampleHistory")) == "table" and type(rawget(v6, "Evidence")) == "table" then
-					v5 = v6
-					break
-				end
-			end
-		end
-	end
-
-	return v5
-end
-
-local tbl4 = {busy = false, nextAt = 0, misses = 0, found = nil}
-
-local function fn18(arg, arg2, arg3)
-	local found = tbl4.found
-	if type(found) == "table" and rawget(found, "Player") == arg and rawget(found, "Character") == arg.Character and rawget(found, "Humanoid") == arg2 and rawget(found, "RootPart") == arg3 then
-		return found
-	end
-
-	if tbl4.busy or os.clock() < tbl4.nextAt then
-		return nil
-	end
-
-	tbl4.busy = true
-	task.spawn(function()
-		task.wait()
-		local ok, result = pcall(fn17, arg, arg2, arg3)
-		local v5 = ok and result or nil
-		tbl4.found = v5
-		tbl4.misses = v5 and 0 or tbl4.misses + 1
-		tbl4.nextAt = os.clock() + (v5 and 0.2 or (tbl4.misses >= 5 and 10 or 1))
-		tbl4.busy = false
-	end)
-
-	return nil
-end
-
-local function fn19(arg, arg2, arg3)
-	if type(arg) ~= "table" then
-		return false
-	end
-	local value = rawget(arg, "RootPart")
-	local cFrame = value and value.Parent and value.CFrame or nil
-	local position = cFrame and cFrame.Position or nil
-	local vector = typeof(arg3) == "Vector3" and arg3 or Vector3.new(0, 0, 0)
-
-	local function fn20_inner(arg4)
-		if type(arg4) == "table" then
-			rawset(arg4, "WalkSpeed", arg2)
-			if cFrame then
-				rawset(arg4, "CFrame", cFrame)
-				rawset(arg4, "Position", position)
-				rawset(arg4, "LinearVelocity", vector)
-				rawset(arg4, "AngularVelocity", Vector3.new(0, 0, 0))
-			end
-		end
-	end
-
-	for i, field in ipairs(fields) do
-		fn20_inner(rawget(arg, field))
-	end
-
-	for k, v5 in pairs(rawget(arg, "SampleHistory") or {}) do
-		fn20_inner(v5)
-	end
-
-	for k, v5 in pairs(rawget(arg, "SafeGroundCheckpoints") or {}) do
-		fn20_inner(v5)
-	end
-
-	local value2 = rawget(arg, "Evidence")
-	if type(value2) == "table" then
-		value2.Speed = 0
-		value2.Teleport = 0
-		value2.Flight = 0
-	end
-
-	local value3 = rawget(arg, "ImpulseContext")
-	if type(value3) == "table" then
-		local maxHorizontalSpeed = math.max(tonumber(value3.MaxHorizontalSpeed) or 0, arg2)
-		local n4 = math.max((tonumber(value3.ExpiresAt) or 0) - (tonumber(value3.StartedAt) or 0), clamp)
-		value3.MaxHorizontalSpeed = maxHorizontalSpeed
-		if position then
-			value3.OriginPosition = position
-		end
-		value3.MaxHorizontalDistance = math.max(tonumber(value3.MaxHorizontalDistance) or 0, maxHorizontalSpeed * n4 + padding * 2)
-		fn20_inner(value3.PreMovementSafeSample)
-	end
-
-	if rawget(arg, "CorrectionContext") == nil then
-		rawset(arg, "FirstSuspiciousAt", nil)
-		if rawget(arg, "ThreatLevel") == "Observing" then
-			rawset(arg, "ThreatLevel", "Trusted")
-		end
-	end
-
-	return true
-end
-
-local function fn20()
-	local v5 = fn13()
-	local tbl5 = v5[integrityKey]
-	if type(tbl5) ~= "table" then
-		tbl5 = {}
-		v5[integrityKey] = tbl5
-	end
-	return tbl5
-end
-
-local function fn21(arg, arg2, arg3)
-	return type(arg) == "table" and rawget(arg, "Player") == localPlayer and rawget(arg, "Character") == localPlayer.Character and rawget(arg, "Humanoid") == arg2 and rawget(arg, "RootPart") == arg3
-end
-
-local function fn22(arg, arg2, arg3)
-	return fn21(arg, arg2, arg3)
-end
-
-local function fn23(humanoid, rootPart, arg)
-	local v5 = fn20()
-	local state = v5.State
-
-	if not fn21(state, humanoid, rootPart) then
-		local now = os.clock()
-		if now < (v5.NextSearchAt or 0) then
-			return false
-		end
-		v5.NextSearchAt = now + 0.2
-		state = fn18(localPlayer, humanoid, rootPart)
-	end
-
-	if not state or not fn22(state, humanoid, rootPart) then
-		v5.Enabled = false
-		v5.Humanoid = humanoid
-		v5.RootPart = rootPart
-		v5.State = state
-		return false
-	end
-
-	v5.NextSearchAt = 0
-	v5.Enabled = true
-	v5.Humanoid = humanoid
-	v5.RootPart = rootPart
-	v5.State = state
-	v5.WalkSpeed = math.clamp(arg * headroom, minSpeed, maxSpeed * headroom)
-	v5.TravelVelocity = Vector3.new(0, 0, 0)
-	fn19(state, v5.WalkSpeed, v5.TravelVelocity)
-	return true
-end
-
-local function fn24(arg, arg2, arg3, travelVelocity)
-	local v5 = fn13()[integrityKey]
-	if type(v5) ~= "table" or not v5.Enabled then
-		return false
-	elseif v5.Humanoid ~= arg or v5.RootPart ~= arg2 or not fn22(v5.State, arg, arg2) then
-		return false
-	end
-
-	v5.WalkSpeed = math.clamp(arg3 * headroom, minSpeed, maxSpeed * headroom)
-	v5.TravelVelocity = typeof(travelVelocity) == "Vector3" and travelVelocity or (typeof(v5.TravelVelocity) == "Vector3" and v5.TravelVelocity or Vector3.new(0, 0, 0))
-
-	return fn19(v5.State, v5.WalkSpeed, v5.TravelVelocity)
-end
-
-local function fn25(arg)
-	local v5 = fn13()[integrityKey]
-	if type(v5) ~= "table" then return end
-	if arg == nil or v5.Humanoid == arg then
-		v5.Enabled = false
-		v5.Humanoid = nil
-		v5.RootPart = nil
-		v5.State = nil
-		v5.TravelVelocity = nil
-		v5.NextSearchAt = 0
-	end
-end
-
-local connection3
-local function fn26()
-	if connection3 then return end
-	connection3 = RunService.PreSimulation:Connect(function()
-		if genv.__SenaV4TweenRuntimeGeneration ~= v then
-			local v5 = connection3
-			connection3 = nil
-			if v5 then pcall(v5.Disconnect, v5) end
-			return
-		end
-
-		local character = localPlayer.Character
-		local humanoidRootPart = character and character:FindFirstChild("HumanoidRootPart")
-		local humanoid = character and character:FindFirstChildOfClass("Humanoid")
-		if not character or not humanoidRootPart or not humanoid then return end
-
-		local speedInput = 350
-		fn15(character, speedInput * headroom)
-		if not fn24(humanoid, humanoidRootPart, speedInput) then
-			fn23(humanoid, humanoidRootPart, speedInput)
-		end
-		fn11()
-	end)
-end
-
-local function fn27()
-	if connection3 then
-		pcall(connection3.Disconnect, connection3)
-		connection3 = nil
-	end
-	fn16()
-	fn25()
-end
-
-genv.__SenaV4TweenRuntimeCleanup = function()
-	fn12()
-	fn27()
-end
-
 -- Guard Presentation / Bypass
 pcall(function()
 	local GuardPresentationComponent = require(ReplicatedStorage.Shared.Modules.GuardAreas.GuardPresentationComponent)
@@ -707,16 +194,11 @@ local RARITY_COLORS = {
 	Eternal = Color3.fromRGB(255, 215, 90),
 	Divine = Color3.fromRGB(255, 245, 200),
 }
-local MODES = {
-	{name = "High Speed Fly Mod", desc = "Sena Fly + Integrity Spoof + Delivery Speed 1000"},
-}
-
 local Steal = {
 	enabled = false,
 	status = "Idle",
 	target = "-",
 	carrying = false,
-	mode = "High Speed Fly Mod",
 	rarities = {},
 	holdSeconds = 5,
 	speed = 350, -- ល្បឿនពេលទៅយក Egg (តាមการកំណត់ក្នុង UI/Game)
@@ -773,7 +255,7 @@ local function inSafe(root)
 	return Vector2.new(d.X, d.Z).Magnitude <= SAFE_RADIUS and math.abs(d.Y) <= 18
 end
 
-local Protect = {pad = nil, conn = nil, hb = nil, autoRotate = nil}
+local Protect = {hb = nil, autoRotate = nil}
 
 local function ensureProtect()
 	local root, hum = getRoot()
@@ -784,19 +266,6 @@ local function ensureProtect()
 	if Protect.autoRotate == nil then
 		Protect.autoRotate = hum.AutoRotate
 		hum.AutoRotate = false
-	end
-	if not (Protect.pad and Protect.pad.Parent) then
-		local part = Instance.new("Part")
-		part.Name = "OliverHoverPad"
-		part.Anchored = true
-		part.CanCollide = true
-		part.CanQuery = false
-		part.CanTouch = false
-		part.CastShadow = false
-		part.Transparency = 1
-		part.Size = Vector3.new(8, 2, 8) -- បង្កើនទំហំកម្ពស់ Fly Pad ឱ្យផុតពីដី
-		part.Parent = workspace
-		Protect.pad = part
 	end
 	if not Protect.hb then
 		local function pin()
@@ -818,22 +287,10 @@ local function ensureProtect()
 		pin()
 		Protect.hb = RunService.Heartbeat:Connect(pin)
 	end
-	if not Protect.conn then
-		Protect.conn = RunService.PreSimulation:Connect(function()
-			local r, h = getRoot()
-			if r and h and Protect.pad and Protect.pad.Parent then
-				local p = r.Position
-				local feet = h.HipHeight + r.Size.Y / 2
-				Protect.pad.CFrame = CFrame.new(p.X, p.Y - feet - 0.55, p.Z)
-			end
-		end)
-	end
 end
 
 local function stopProtect()
-	if Protect.conn then Protect.conn:Disconnect() Protect.conn = nil end
 	if Protect.hb then Protect.hb:Disconnect() Protect.hb = nil end
-	if Protect.pad then Protect.pad:Destroy() Protect.pad = nil end
 	local root, hum = getRoot()
 	if root then root:SetAttribute("KillPartIgnore", nil) end
 	if hum then
@@ -851,61 +308,32 @@ end
 
 local MIN_SPEED, MAX_SPEED = 200, 1000
 
+-- Tween ទៅទីតាំង (Linear) ដោយប្រើល្បឿន Steal.speed
 local function travel(pos, abort)
-	local speed = math.clamp(Steal.speed, MIN_SPEED, MAX_SPEED)
 	local root, hum = getRoot()
 	if not root or not hum then return false end
-	
-	fn26()
-	fn23(hum, root, speed)
-	
-	local takeoffPos = Vector3.new(pos.X, math.max(pos.Y, root.Position.Y + 10), pos.Z)
-	
-	local slowUntil, lastMag, arrivedAt = 0, nil, nil
-	while true do
+	local speed = math.clamp(Steal.speed, MIN_SPEED, MAX_SPEED)
+	local rot = root.CFrame - root.CFrame.Position
+	local t = math.max((root.Position - pos).Magnitude / speed, 0.05)
+	local tw = TweenService:Create(root, TweenInfo.new(t, Enum.EasingStyle.Linear), {CFrame = CFrame.new(pos) * rot})
+	local done = false
+	local conn = tw.Completed:Connect(function() done = true end)
+	tw:Play()
+	while not done do
 		root, hum = getRoot()
-		if not root or not hum or hum.Health <= 0 then fn27() return false end
-		if abort and abort() then fn27() return false end
-		
-		local dt = RunService.Heartbeat:Wait()
-		root, hum = getRoot()
-		if not root or not hum then fn27() return false end
-		dt = math.max(math.min(dt, 0.15), 1 / 240)
-
-		local cur = root.Position
-		local delta = takeoffPos - cur
-		local mag = delta.Magnitude
-		local flat = Vector3.new(delta.X, 0, delta.Z)
-		local look = root.CFrame.LookVector
-		local lookFlat = Vector3.new(look.X, 0, look.Z)
-		local face = flat.Magnitude > 0.001 and flat.Unit or (lookFlat.Magnitude > 0.001 and lookFlat.Unit or Vector3.new(0, 0, -1))
-
-		if lastMag and mag > lastMag + 2 then
-			slowUntil = os.clock() + 0.5
+		if not root or not hum or hum.Health <= 0 or (abort and abort()) then
+			tw:Cancel()
+			conn:Disconnect()
+			if root then root.AssemblyLinearVelocity = Vector3.zero end
+			return false
 		end
-		lastMag = mag
-		local curSpeed = os.clock() < slowUntil and math.max(MIN_SPEED, speed * 0.45) or speed
-		local step = curSpeed * dt
-
-		if mag <= math.max(step, 0.05) then
-			root.CFrame = CFrame.lookAt(takeoffPos, takeoffPos + face)
-			root.AssemblyLinearVelocity = Vector3.zero
-			
-			fn24(hum, root, speed, Vector3.new(0, 0, 0))
-			
-			arrivedAt = arrivedAt or os.clock()
-			if os.clock() - arrivedAt >= 0.4 then fn27() return true end
-		else
-			arrivedAt = nil
-			local nextPos = cur + delta.Unit * math.min(step, mag)
-			local travelVel = (nextPos - cur) / dt
-			
-			root.CFrame = CFrame.lookAt(nextPos, nextPos + face)
-			root.AssemblyLinearVelocity = Vector3.zero
-			
-			fn24(hum, root, speed, travelVel)
-		end
+		root.AssemblyLinearVelocity = Vector3.zero
+		RunService.Heartbeat:Wait()
 	end
+	conn:Disconnect()
+	root, hum = getRoot()
+	if root then root.AssemblyLinearVelocity = Vector3.zero end
+	return root ~= nil
 end
 
 local function wallSealed()
@@ -1335,37 +763,6 @@ clearBtn.MouseButton1Click:Connect(function()
 	for _, name in ipairs(RARITIES) do renderChip(name) end
 end)
 
-local mods = makeSection(stealPage, "MOD", 2, false)
-local modButtons = {}
-local function renderMods()
-	for name, m in pairs(modButtons) do
-		local on = name == Steal.mode
-		tween(m.btn, 0.12, {BackgroundColor3 = on and Color3.fromRGB(48, 52, 96) or PANEL2})
-		m.stroke.Color = on and ACCENT or PANEL2
-		m.dot.BackgroundColor3 = on and ACCENT or STROKE
-	end
-end
-for i, m in ipairs(MODES) do
-	local b = new("TextButton", {
-		Size = UDim2.new(1, 0, 0, 42), BackgroundColor3 = PANEL2, Text = "", AutoButtonColor = false, LayoutOrder = i,
-	}, mods)
-	corner(b, 8)
-	local st = stroke(b, PANEL2, 1.5)
-	local n = label(b, m.name, 13, TEXT, Enum.Font.GothamBold)
-	n.Size = UDim2.new(1, -40, 0, 18)
-	n.Position = UDim2.fromOffset(12, 5)
-	local d = label(b, m.desc, 11, MUTED)
-	d.Size = UDim2.new(1, -40, 0, 14)
-	d.Position = UDim2.fromOffset(12, 23)
-	local dot = new("Frame", {Size = UDim2.fromOffset(12, 12), Position = UDim2.new(1, -24, 0.5, -6), BackgroundColor3 = STROKE}, b)
-	corner(dot, 6)
-	modButtons[m.name] = {btn = b, stroke = st, dot = dot}
-	b.MouseButton1Click:Connect(function()
-		Steal.mode = m.name
-		renderMods()
-	end)
-end
-renderMods()
 for _, name in ipairs(RARITIES) do renderChip(name) end
 
 local refreshers = {}
@@ -1416,13 +813,11 @@ local function cfgNotify(text, good)
 end
 
 local function refreshAll()
-	renderMods()
 	for _, name in ipairs(RARITIES) do renderChip(name) end
 	for _, f in ipairs(refreshers) do f() end
 end
 
 local function cfgReset()
-	Steal.mode = "High Speed Fly Mod"
 	Steal.rarities = {}
 	Steal.holdSeconds = 0
 	Steal.speed = 300
@@ -1435,7 +830,7 @@ local function cfgSave()
 	local rars = {}
 	for n in pairs(Steal.rarities) do table.insert(rars, n) end
 	local data = {
-		mode = Steal.mode, rarities = rars, hold = Steal.holdSeconds, speed = Steal.speed, deliver = Steal.deliverSpeed,
+		rarities = rars, hold = Steal.holdSeconds, speed = Steal.speed, deliver = Steal.deliverSpeed,
 	}
 	local ok, err = pcall(function() writefile(CONFIG_FILE, HttpService:JSONEncode(data)) end)
 	return ok, ok and "Saved" or tostring(err)
@@ -1446,9 +841,6 @@ local function cfgLoad()
 	if not isfile(CONFIG_FILE) then return false, "No saved config" end
 	local ok, data = pcall(function() return HttpService:JSONDecode(readfile(CONFIG_FILE)) end)
 	if not ok or type(data) ~= "table" then return false, "Config file is invalid" end
-	for _, m in ipairs(MODES) do
-		if m.name == data.mode then Steal.mode = m.name end
-	end
 	Steal.rarities = {}
 	for _, n in ipairs(type(data.rarities) == "table" and data.rarities or {}) do
 		if RARITY_COLORS[n] then Steal.rarities[n] = true end
@@ -1525,4 +917,4 @@ task.spawn(function()
 end)
 
 pcall(cfgLoad)
-print("[SenaV4 + OLIVER] Fly Mod & Speed 1000 Delivery Initialized!")
+print("[OLIVER] Tween Auto Steal Initialized!")
