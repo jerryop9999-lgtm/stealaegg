@@ -417,6 +417,27 @@ local GUARD_FRONT = 2.5
 local STRIKE_TIME = 1.5
 local KB_SPEED = 18
 
+local instantPhase = nil -- "priming" | "hunting" | nil
+
+-- Guard Hit Distance (ពី Open.lua): ពេល Bait = 25 studs, ក្រៅពីនោះ Guard មិនអាចវាយបាន (កុំឲ្យងាប់)
+local function installGuardHook()
+    local ok = pcall(function()
+        local Policy = require(ReplicatedStorage.Shared.Modules.GuardAreas.GuardChasePolicy)
+        if type(Policy) ~= "table" or type(Policy.ResolveHitDistance) ~= "function" then return end
+        if not genv.__OliverGuardOrig then genv.__OliverGuardOrig = Policy.ResolveHitDistance end
+        local orig = genv.__OliverGuardOrig
+        Policy.ResolveHitDistance = function(a)
+            if Steal.enabled then
+                if instantPhase == "priming" then return 25 end
+                return -math.huge
+            end
+            return orig(a)
+        end
+    end)
+    if not ok then warn("[Instant] GuardChasePolicy hook failed") end
+end
+installGuardHook()
+
 local function tp(cf)
     local r = getRoot()
     if not r then return false end
@@ -586,7 +607,7 @@ local function requestGrab(rec, secs, stopped)
 end
 
 -- return: true = កាន់ Egg គោលដៅហើយ | false = បរាជ័យ | "retry" = ព្យាយាមម្ដងទៀត (មិន Skip)
-local function instantSteal(target, stopped, skip)
+local function instantStealInner(target, stopped, skip)
     local rname = rarityOf(target)
     local function gone(uid)
         local r = findByUid(uid)
@@ -604,6 +625,7 @@ local function instantSteal(target, stopped, skip)
     local ppos = eggPos(primer)
     if not root or not hum or not ppos then return "retry" end
     skip[primer.Uid] = true
+    instantPhase = "priming"
 
     Steal.status = "Priming guard"
     local primeCF = CFrame.new(ppos + Vector3.new(0, feetOffset(root, hum) + 0.15, 0))
@@ -622,6 +644,7 @@ local function instantSteal(target, stopped, skip)
     -- 2. Bait guard
     Steal.status = "Baiting guard"
     local landed, anchor = baitGuard(primer, stopped)
+    instantPhase = "hunting"
     local c = myCarriedEgg()
     if c and c.Uid == primer.Uid then
         pcall(EggState.DropFieldEgg, "PlayerRequest")
@@ -660,6 +683,12 @@ local function instantSteal(target, stopped, skip)
     if not hopRoot(dest, abort) then return "retry" end
     Steal.status = "Grabbing " .. rname
     return requestGrab(target, 3, stopped)
+end
+
+local function instantSteal(target, stopped, skip)
+    local res = instantStealInner(target, stopped, skip)
+    instantPhase = nil
+    return res
 end
 
 local function instantDeliver(stopped)
