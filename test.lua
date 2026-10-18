@@ -1,4 +1,4 @@
--- [[ SenaV4 Hub & OLIVER Auto Steal - Fixed Delivery & Server Accept Script ]] --
+-- [[ SenaV4 Hub & OLIVER Auto Steal - Fly Mod & Speed 1000 Delivery ]] --
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ProximityPromptService = game:GetService("ProximityPromptService")
@@ -27,7 +27,7 @@ local function fn2()
 	return genv.__SenaV4HubSession == senaV4HubSession
 end
 
--- ប្រព័ន្ធសុវត្ថិភាព និង Anti-Tamper
+-- ប្រព័ន្ធសុវត្ថិភាព និង Anti-Tamper[span_0](start_span)[span_0](end_span)
 do
 	local tbl2 = {"hookfunction", "hookmetamethod", "getconnections", "getgc", "getrawmetatable", "firetouchinterest", "newcclosure", "getnamecallmethod", "checkcaller", "getcallingscript"}
 	local iscclosure = genv.iscclosure or rawget(_G, "iscclosure")
@@ -186,7 +186,7 @@ genv.__SenaV4NetPing = function()
 	return tonumber(n2) or 0
 end
 
--- Hover Pad System & Sena Integrity Core
+-- Hover Pad System (Fly Mod) & Sena Integrity Core[span_1](start_span)[span_1](end_span)
 local n2, n3, name, str, v3 = 8, 1, "__SenaV4HoverPad", "SenaV4RuntimeOwner"
 local str2 = tostring(math.random(100000, 999999))
 local connection, connection2
@@ -663,7 +663,7 @@ genv.__SenaV4TweenRuntimeCleanup = function()
 	fn27()
 end
 
--- Guard Presentation / Bypass
+-- Guard Presentation / Bypass[span_2](start_span)[span_2](end_span)
 pcall(function()
 	local GuardPresentationComponent = require(ReplicatedStorage.Shared.Modules.GuardAreas.GuardPresentationComponent)
 	if type(GuardPresentationComponent) == "table" then
@@ -677,7 +677,7 @@ pcall(function()
 end)
 
 ------------------------------------------------------------
--- OLIVER | Steal an Egg UI & Anti-Speed Logic Integration
+-- OLIVER | Steal an Egg UI & Speed 1000 Delivery Integration
 ------------------------------------------------------------
 local TITLE = "OLIVER."
 local VERSION = "V3"
@@ -708,7 +708,7 @@ local RARITY_COLORS = {
 	Divine = Color3.fromRGB(255, 245, 200),
 }
 local MODES = {
-	{name = "High Speed User Normal", desc = "Sena ground movement + Integrity Spoof + Takeoff"},
+	{name = "High Speed Fly Mod", desc = "Sena Fly + Integrity Spoof + Delivery Speed 1000"},
 }
 
 local Steal = {
@@ -716,10 +716,10 @@ local Steal = {
 	status = "Idle",
 	target = "-",
 	carrying = false,
-	mode = "High Speed User Normal",
+	mode = "High Speed Fly Mod",
 	rarities = {},
 	holdSeconds = 5,
-	speed = 350,
+	speed = 350, -- ល្បឿនពេលទៅយក Egg (តាមការកំណត់ក្នុង UI/Game)
 	vip = {Secret = true, Eternal = true, Divine = true},
 }
 local token = 0
@@ -974,25 +974,24 @@ local function stealLoop(myToken)
 
 			if carried then
 				lastUid = carried.Uid
-				Steal.status = "Delivering egg"
+				Steal.status = "Delivering egg (Speed 1000)"
 				if not inSafe(root) then
-					-- កាត់បន្ថយល្បឿនមកត្រឹម 180 បណ្តោះអាសន្នពេលយួរស៊ុត ដើម្បីឱ្យ Server ទទួលយកបាន (មិន Desync)
+					-- 🚀 កំណត់ល្បឿនមក Base វិញ ឱ្យលឿនបំផុត 1000
 					local oldSpeed = Steal.speed
-					Steal.speed = math.min(Steal.speed, 180)
+					Steal.speed = 1000 
 					travel(SAFE_POS + Vector3.new(0, 2, 0), function() return stopped() or not myCarriedEgg() end)
-					Steal.speed = oldSpeed -- ដាក់ល្បឿនដើមវិញពេលទៅរកស៊ុតបន្ទាប់
+					Steal.speed = oldSpeed
 				else
 					Steal.status = "Waiting for deposit"
-					-- កែតម្រូវទីតាំង និងបន្ថែមពេលរង់ចាំឱ្យ Server ទទួលយកស៊ុត (Deposit Fix)
 					root.CFrame = CFrame.new(SAFE_POS + Vector3.new(0, 1, 0))
 					root.AssemblyLinearVelocity = Vector3.zero
-					task.wait(1.0) -- បន្ថែមពេលចាំឱ្យ Server ទទួលយកស៊ុតចូល Base
+					task.wait(0.3) -- ពេលរង់ចាំខ្លីឱ្យ Server ទទួលស៊ុតចូល Base
 				end
 			elseif wallSealed() then
 				Steal.status = "Egg reset - waiting"
 				task.wait(0.5)
 			else
-				-- 🟢 ដាក់កូដស្វែងរក និងចាប់ស៊ុតនៅទីនេះ (ឲ្យដាច់ដោយឡែកពីពេលយួរស៊ុតរួច)
+				-- 🐢 ពេលទៅយក Egg ប្រើល្បឿនធម្មតាដែលអ្នកកំណត់ក្នុង Game/UI (Steal.speed)
 				local target
 				if lastUid then
 					local rec = findByUid(lastUid)
@@ -1068,7 +1067,7 @@ local function stealLoop(myToken)
 						end
 					end
 				end
-			end -- បิด the main else block ឲ្យត្រូវរចនាសម្ព័ន្ធ
+			end
 		end
 		task.wait()
 	end
@@ -1392,7 +1391,7 @@ end
 
 local tweenCfg = makeSection(settingsPage, "Movement Settings", 1, true)
 addStepper(tweenCfg, 1, "Hold at egg", function() return Steal.holdSeconds end, function(v) Steal.holdSeconds = v end, 1, 10, 1, "s")
-addStepper(tweenCfg, 2, "Speed", function() return Steal.speed end, function(v) Steal.speed = v end, MIN_SPEED, MAX_SPEED, 50, "")
+addStepper(tweenCfg, 2, "Speed (To Egg)", function() return Steal.speed end, function(v) Steal.speed = v end, MIN_SPEED, MAX_SPEED, 50, "")
 
 local CONFIG_FILE = "OLIVER_AutoSteal.json"
 local cfgSection = makeSection(settingsPage, "Config", 2, true)
@@ -1416,7 +1415,7 @@ local function refreshAll()
 end
 
 local function cfgReset()
-	Steal.mode = "High Speed User Normal"
+	Steal.mode = "High Speed Fly Mod"
 	Steal.rarities = {}
 	Steal.holdSeconds = 5
 	Steal.speed = 350
@@ -1517,4 +1516,4 @@ task.spawn(function()
 end)
 
 pcall(cfgLoad)
-print("[SenaV4 + OLIVER] Fixed Anti-Desync & Delivery Fix Initialized!")
+print("[SenaV4 + OLIVER] Fly Mod & Speed 1000 Delivery Initialized!")
