@@ -6,12 +6,14 @@ local UIS = game:GetService("UserInputService")
 local RS = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
 local RunService = game:GetService("RunService")
+local HttpService = game:GetService("HttpService")
 local player = Players.LocalPlayer
 
 ------------------------------------------------------------
 -- CONFIG
 ------------------------------------------------------------
-local TITLE = "OLIVER"
+local TITLE = "OLIVER."
+local VERSION = "V3"
 local LOGO_ID = "rbxassetid://0" -- ← ដាក់ Logo ID របស់អ្នកនៅទីនេះ (ឧ. "rbxassetid://123456789")
 local ACCENT = Color3.fromRGB(110, 120, 255)
 
@@ -44,10 +46,7 @@ local RARITY_COLORS = {
 	Divine = Color3.fromRGB(255, 245, 200),
 }
 local MODES = {
-	{name = "Instant Steal", speed = 600, desc = "Fastest tween, straight line"},
-	{name = "High Speed Normal", speed = 300, desc = "Ground tween (default)"},
-	{name = "High Speed (Fly)", speed = 300, desc = "Tween up, across, then down"},
-	{name = "Zig-Zag", speed = 300, desc = "Tween with side-to-side path"},
+	{name = "High Speed User Normal", desc = "Sena ground movement (per-frame, ground-safe)"},
 }
 
 local Steal = {
@@ -56,20 +55,13 @@ local Steal = {
 	target = "-",
 	guard = "Sleeping",
 	carrying = false,
-	mode = "High Speed Normal",
+	mode = "High Speed User Normal",
 	rarities = {},      -- ទទេ = យកទាំងអស់ (ល្អបំផុតមុន)
 	holdSeconds = 5,    -- ឈរលើស៊ុតមុនយក (Sena: ~5s)
-	flyHeight = 60,
+	speed = 600,        -- Sena: ค่าเริ่มต้น 600 (min 200 / max 1000)
 	vip = {Secret = true, Eternal = true, Divine = true}, -- មិនរំលង ព្យាយាមរហូត
 }
 local token = 0
-
-local function modeSpeed()
-	for _, m in ipairs(MODES) do
-		if m.name == Steal.mode then return m.speed end
-	end
-	return 300
-end
 
 local function rarityOf(rec)
 	local a = Assets.Directory[rec.AssetCategory]
@@ -162,63 +154,78 @@ local function stopProtect()
 	Protect.autoRotate = nil
 end
 
--- Tween ទៅទីតាំង (TweenService) - អាចបញ្ឈប់ពាក់កណ្តាលផ្លូវបានតាម abort()
-local function tweenTo(pos, abort)
-	local root = getRoot()
-	if not root then return false end
-	local dist = (root.Position - pos).Magnitude
-	if dist < 1 then return true end
-	local keepRot = root.CFrame - root.CFrame.Position
-	local tw = TweenService:Create(
-		root,
-		TweenInfo.new(math.max(dist / modeSpeed(), 0.03), Enum.EasingStyle.Linear),
-		{CFrame = CFrame.new(pos) * keepRot}
-	)
-	tw:Play()
-	local aborted = false
-	while tw.PlaybackState == Enum.PlaybackState.Playing or tw.PlaybackState == Enum.PlaybackState.Begin do
-		if not root.Parent or (abort and abort()) then
-			aborted = true
-			tw:Cancel()
-			break
-		end
-		RunService.Heartbeat:Wait()
+-- ចលនា "High Speed User Normal" ពី Sena: ផ្លាស់ទីរាល់ frame ទៅរកគោលដៅ
+local MIN_SPEED, MAX_SPEED = 200, 1000
+
+local function feetOffset(root, hum)
+	if hum.RigType == Enum.HumanoidRigType.R15 then
+		return root.Size.Y * 0.5 + math.max(hum.HipHeight, 0.5)
 	end
-	if root.Parent then
-		root.AssemblyLinearVelocity = Vector3.zero
-	end
-	return not aborted
+	return root.Size.Y * 0.5 + 2
 end
 
--- ជ្រើសផ្លូវតាម MOD (ទាំងអស់ប្រើ Tween)
+local function groundYAt(x, z, char)
+	local root = char and char:FindFirstChild("HumanoidRootPart")
+	local origin = Vector3.new(x, (root and root.Position.Y or SAFE_POS.Y) + 60, z)
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Exclude
+	params.FilterDescendantsInstances = {char}
+	params.IgnoreWater = true
+	local hit = workspace:Raycast(origin, Vector3.new(0, -300, 0), params)
+	return hit and hit.Position.Y
+end
+
 local function travel(pos, abort)
-	local root = getRoot()
-	if not root then return false end
-	local mode = Steal.mode
-	if mode == "High Speed (Fly)" then
-		local alt = math.max(root.Position.Y, pos.Y) + Steal.flyHeight
-		return tweenTo(Vector3.new(root.Position.X, alt, root.Position.Z), abort)
-			and tweenTo(Vector3.new(pos.X, alt, pos.Z), abort)
-			and tweenTo(pos, abort)
-	elseif mode == "Zig-Zag" then
-		local from = root.Position
-		local flat = Vector3.new(pos.X - from.X, 0, pos.Z - from.Z)
-		local len = flat.Magnitude
-		if len > 30 then
-			local dir = flat.Unit
-			local side = Vector3.new(-dir.Z, 0, dir.X)
-			local n = math.floor(len / 25)
-			for i = 1, n do
-				local base = from + dir * (len * i / (n + 1))
-				local wp = base + side * (i % 2 == 0 and 14 or -14)
-				if not tweenTo(Vector3.new(wp.X, from.Y + (pos.Y - from.Y) * i / (n + 1), wp.Z), abort) then
-					return false
+	local speed = math.clamp(Steal.speed, MIN_SPEED, MAX_SPEED)
+	local slowUntil, lastMag, arrivedAt = 0, nil, nil
+	while true do
+		local root, hum = getRoot()
+		if not root or not hum or hum.Health <= 0 then return false end
+		if abort and abort() then return false end
+		local dt = RunService.Heartbeat:Wait()
+		root, hum = getRoot()
+		if not root or not hum then return false end
+		dt = math.max(math.min(dt, 0.15), 1 / 240)
+
+		local cur = root.Position
+		local delta = pos - cur
+		local mag = delta.Magnitude
+		local flat = Vector3.new(delta.X, 0, delta.Z)
+		local look = root.CFrame.LookVector
+		local lookFlat = Vector3.new(look.X, 0, look.Z)
+		local face = flat.Magnitude > 0.001 and flat.Unit
+			or (lookFlat.Magnitude > 0.001 and lookFlat.Unit or Vector3.new(0, 0, -1))
+
+		-- server ទាញត្រឡប់ (ចម្ងាយកើនឡើង > 2) → បន្ថយល្បឿន 0.5 វិនាទី (ដូច Sena)
+		if lastMag and mag > lastMag + 2 then
+			slowUntil = os.clock() + 0.5
+		end
+		lastMag = mag
+		local curSpeed = os.clock() < slowUntil and math.max(MIN_SPEED, speed * 0.45) or speed
+		local step = curSpeed * dt
+
+		if mag <= math.max(step, 0.05) then
+			-- ដល់ហើយ: ឈរនៅ 0.4 វិនាទី
+			root.CFrame = CFrame.lookAt(pos, pos + face)
+			root.AssemblyLinearVelocity = Vector3.zero
+			arrivedAt = arrivedAt or os.clock()
+			if os.clock() - arrivedAt >= 0.4 then return true end
+		else
+			arrivedAt = nil
+			local nextPos = cur + delta.Unit * math.min(step, mag)
+			if dt >= 1 / 30 then -- fps ទាប: កុំឱ្យធ្លាក់ក្រោមដី
+				local gy = groundYAt(nextPos.X, nextPos.Z, player.Character)
+				if gy then
+					local minY = gy + feetOffset(root, hum)
+					if nextPos.Y < minY then
+						nextPos = Vector3.new(nextPos.X, minY, nextPos.Z)
+					end
 				end
 			end
+			root.CFrame = CFrame.lookAt(nextPos, nextPos + face)
+			root.AssemblyLinearVelocity = Vector3.zero
 		end
-		return tweenTo(pos, abort)
 	end
-	return tweenTo(pos, abort)
 end
 
 local function wallSealed()
@@ -522,12 +529,12 @@ local scale = new("UIScale", {Scale = 1}, main)
 local header = new("Frame", {Size = UDim2.new(1, 0, 0, 40), BackgroundColor3 = BG2}, main)
 corner(header, 14)
 new("Frame", {Size = UDim2.new(1, 0, 0, 14), Position = UDim2.new(0, 0, 1, -14), BackgroundColor3 = BG2, BorderSizePixel = 0}, header)
-local titleLbl = label(header, TITLE, 16, ACCENT, Enum.Font.GothamBold)
-titleLbl.Size = UDim2.new(0, 90, 1, 0)
+local titleLbl = label(header, TITLE, 17, ACCENT, Enum.Font.GothamBold)
+titleLbl.Size = UDim2.new(0.5, 0, 1, 0)
 titleLbl.Position = UDim2.fromOffset(14, 0)
-local subLbl = label(header, "Auto Steal  ·  Steal an Egg", 11, MUTED)
-subLbl.Size = UDim2.new(1, -170, 1, 0)
-subLbl.Position = UDim2.fromOffset(90, 2)
+local verLbl = label(header, VERSION, 13, MUTED, Enum.Font.GothamBold, Enum.TextXAlignment.Right)
+verLbl.Size = UDim2.fromOffset(40, 40)
+verLbl.Position = UDim2.new(1, -86, 0, 0)
 new("Frame", {Size = UDim2.new(1, 0, 0, 1), Position = UDim2.new(0, 0, 1, -1), BackgroundColor3 = STROKE, BorderSizePixel = 0}, header)
 
 local closeBtn = new("TextButton", {
@@ -540,12 +547,12 @@ makeDraggable(header, main)
 
 -- Tab rail
 local body = new("Frame", {Size = UDim2.new(1, 0, 1, -40), Position = UDim2.fromOffset(0, 40), BackgroundTransparency = 1}, main)
-local rail = new("Frame", {Size = UDim2.new(0, 104, 1, 0), BackgroundTransparency = 1, BorderSizePixel = 0}, body)
+local rail = new("Frame", {Size = UDim2.new(0, 122, 1, 0), BackgroundTransparency = 1, BorderSizePixel = 0}, body)
 new("Frame", {Size = UDim2.new(0, 1, 1, 0), Position = UDim2.new(1, -1, 0, 0), BackgroundColor3 = STROKE, BorderSizePixel = 0}, rail)
 pad(rail, 8, 10, 8, 8)
 new("UIListLayout", {Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder}, rail)
 
-local pagesHolder = new("Frame", {Size = UDim2.new(1, -104, 1, 0), Position = UDim2.fromOffset(104, 0), BackgroundTransparency = 1}, body)
+local pagesHolder = new("Frame", {Size = UDim2.new(1, -122, 1, 0), Position = UDim2.fromOffset(122, 0), BackgroundTransparency = 1}, body)
 
 local tabs = {}
 local function selectTab(name)
@@ -560,9 +567,9 @@ end
 local function addTab(name, glyph, order)
 	local btn = new("TextButton", {
 		Size = UDim2.new(1, 0, 0, 34), BackgroundColor3 = PANEL, BackgroundTransparency = 1,
-		Text = "  " .. glyph .. "  " .. name, TextColor3 = MUTED, TextSize = 13,
+		Text = "  " .. glyph .. "  " .. name, TextColor3 = MUTED, TextSize = 12,
 		Font = Enum.Font.GothamMedium, TextXAlignment = Enum.TextXAlignment.Left,
-		AutoButtonColor = false, LayoutOrder = order,
+		AutoButtonColor = false, LayoutOrder = order, TextTruncate = Enum.TextTruncate.AtEnd,
 	}, rail)
 	corner(btn, 8)
 	local bar = new("Frame", {Size = UDim2.new(0, 3, 0, 18), Position = UDim2.new(0, 0, 0.5, -9), BackgroundColor3 = ACCENT, Visible = false}, btn)
@@ -580,7 +587,7 @@ local function addTab(name, glyph, order)
 end
 
 local stealPage = addTab("Main", "◆", 1)
-local statusPage = addTab("Status", "●", 2)
+local settingsPage = addTab("Settings Config", "⚙", 2)
 
 -- Collapsible card (↑ = ปิด / ↓ = เปิด)
 local function makeSection(parent, title, order, startOpen)
@@ -717,24 +724,110 @@ end
 renderMods()
 for _, name in ipairs(RARITIES) do renderChip(name) end
 
--- Status tab
-local function infoRow(order, key)
-	local row = new("Frame", {Size = UDim2.new(1, 0, 0, 34), BackgroundColor3 = PANEL, LayoutOrder = order}, statusPage)
+-- Settings Config tab
+local refreshers = {}
+local function addStepper(parent, order, title, get, set, minV, maxV, stepV, suffix)
+	local row = new("Frame", {Size = UDim2.new(1, 0, 0, 34), BackgroundColor3 = PANEL2, LayoutOrder = order}, parent)
 	corner(row, 8)
-	local k = label(row, key, 12, MUTED)
-	k.Size = UDim2.new(0.4, 0, 1, 0)
-	k.Position = UDim2.fromOffset(12, 0)
-	local v = label(row, "-", 12, TEXT, Enum.Font.GothamMedium, Enum.TextXAlignment.Right)
-	v.Size = UDim2.new(0.6, -24, 1, 0)
-	v.Position = UDim2.new(0.4, 0, 0, 0)
-	v.TextTruncate = Enum.TextTruncate.AtEnd
-	return v
+	local t = label(row, title, 12, TEXT, Enum.Font.GothamMedium)
+	t.Size = UDim2.new(1, -140, 1, 0)
+	t.Position = UDim2.fromOffset(10, 0)
+	local function mk(txt, x)
+		local b = new("TextButton", {
+			Size = UDim2.fromOffset(26, 24), Position = UDim2.new(1, x, 0.5, -12), BackgroundColor3 = PANEL,
+			Text = txt, TextColor3 = TEXT, TextSize = 16, Font = Enum.Font.GothamBold, AutoButtonColor = false,
+		}, row)
+		corner(b, 6)
+		return b
+	end
+	local minus = mk("−", -126)
+	local plus = mk("+", -36)
+	local val = label(row, "", 12, TEXT, Enum.Font.GothamBold, Enum.TextXAlignment.Center)
+	val.Size = UDim2.fromOffset(60, 34)
+	val.Position = UDim2.new(1, -98, 0, 0)
+	local function refresh() val.Text = tostring(get()) .. suffix end
+	minus.MouseButton1Click:Connect(function() set(math.clamp(get() - stepV, minV, maxV)) refresh() end)
+	plus.MouseButton1Click:Connect(function() set(math.clamp(get() + stepV, minV, maxV)) refresh() end)
+	refresh()
+	table.insert(refreshers, refresh)
 end
-local vStatus = infoRow(1, "Status")
-local vTarget = infoRow(2, "Target rarity")
-local vGuard = infoRow(3, "Guard")
-local vCarry = infoRow(4, "Carrying egg")
-local vMode = infoRow(5, "MOD")
+
+local tweenCfg = makeSection(settingsPage, "Movement Settings", 1, true)
+addStepper(tweenCfg, 1, "Hold at egg", function() return Steal.holdSeconds end, function(v) Steal.holdSeconds = v end, 1, 10, 1, "s")
+addStepper(tweenCfg, 2, "Speed", function() return Steal.speed end, function(v) Steal.speed = v end, MIN_SPEED, MAX_SPEED, 50, "")
+
+local CONFIG_FILE = "OLIVER_AutoSteal.json"
+local cfgSection = makeSection(settingsPage, "Config", 2, true)
+local cfgRow = new("Frame", {Size = UDim2.new(1, 0, 0, 32), BackgroundTransparency = 1, LayoutOrder = 1}, cfgSection)
+local cfgMsg = label(cfgSection, "", 11, MUTED)
+cfgMsg.Size = UDim2.new(1, 0, 0, 16)
+cfgMsg.LayoutOrder = 2
+
+local function cfgNotify(text, good)
+	cfgMsg.Text = text
+	cfgMsg.TextColor3 = good and GREEN or Color3.fromRGB(255, 110, 110)
+	task.delay(2.5, function()
+		if cfgMsg.Text == text then cfgMsg.Text = "" end
+	end)
+end
+
+local function refreshAll()
+	renderMods()
+	for _, name in ipairs(RARITIES) do renderChip(name) end
+	for _, f in ipairs(refreshers) do f() end
+end
+
+local function cfgReset()
+	Steal.mode = "High Speed User Normal"
+	Steal.rarities = {}
+	Steal.holdSeconds = 5
+	Steal.speed = 600
+	refreshAll()
+end
+
+local function cfgSave()
+	if type(writefile) ~= "function" then return false, "Executor has no writefile" end
+	local rars = {}
+	for n in pairs(Steal.rarities) do table.insert(rars, n) end
+	local data = {
+		mode = Steal.mode, rarities = rars, hold = Steal.holdSeconds, speed = Steal.speed,
+	}
+	local ok, err = pcall(function() writefile(CONFIG_FILE, HttpService:JSONEncode(data)) end)
+	return ok, ok and "Saved" or tostring(err)
+end
+
+local function cfgLoad()
+	if type(readfile) ~= "function" or type(isfile) ~= "function" then return false, "Executor has no readfile" end
+	if not isfile(CONFIG_FILE) then return false, "No saved config" end
+	local ok, data = pcall(function() return HttpService:JSONDecode(readfile(CONFIG_FILE)) end)
+	if not ok or type(data) ~= "table" then return false, "Config file is invalid" end
+	for _, m in ipairs(MODES) do
+		if m.name == data.mode then Steal.mode = m.name end
+	end
+	Steal.rarities = {}
+	for _, n in ipairs(type(data.rarities) == "table" and data.rarities or {}) do
+		if RARITY_COLORS[n] then Steal.rarities[n] = true end
+	end
+	Steal.holdSeconds = math.clamp(tonumber(data.hold) or 5, 1, 10)
+	Steal.speed = math.clamp(tonumber(data.speed) or 600, MIN_SPEED, MAX_SPEED)
+	refreshAll()
+	return true, "Loaded"
+end
+
+local function cfgButton(text, x, color, fn)
+	local b = new("TextButton", {
+		Size = UDim2.new(1 / 3, -4, 1, 0), Position = UDim2.new(x, 0, 0, 0), BackgroundColor3 = color,
+		Text = text, TextColor3 = Color3.new(1, 1, 1), TextSize = 12, Font = Enum.Font.GothamBold, AutoButtonColor = false,
+	}, cfgRow)
+	corner(b, 8)
+	b.MouseButton1Click:Connect(function()
+		local ok, msg = fn()
+		cfgNotify(msg, ok)
+	end)
+end
+cfgButton("Save", 0, Color3.fromRGB(70, 100, 230), cfgSave)
+cfgButton("Load", 1 / 3, Color3.fromRGB(60, 150, 110), cfgLoad)
+cfgButton("Reset", 2 / 3, Color3.fromRGB(150, 70, 80), function() cfgReset() return true, "Reset to default" end)
 
 -- Floating logo button
 local hasLogo = LOGO_ID ~= "" and not LOGO_ID:match("^rbxassetid://0?$")
@@ -781,13 +874,11 @@ selectTab("Main")
 -- Live update
 task.spawn(function()
 	while gui.Parent do
-		toggleSub.Text = Steal.status
-		vStatus.Text = Steal.status
-		vTarget.Text = Steal.target
-		vGuard.Text = Steal.guard
-		vCarry.Text = Steal.carrying and "Yes" or "No"
-		vMode.Text = Steal.mode
+		toggleSub.Text = Steal.status .. "  ·  Guard: " .. Steal.guard
 		liveDot.Visible = Steal.enabled
 		task.wait(0.25)
 	end
 end)
+
+-- ផ្ទុក config ដែលបានរក្សាទុក (បើមាន)
+pcall(cfgLoad)
