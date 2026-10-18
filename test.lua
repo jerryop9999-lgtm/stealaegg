@@ -1,4 +1,4 @@
--- [[ SenaV4 Hub & OLIVER Auto Steal - Fixed Anti-Desync & Server Accept Script ]] --
+-- [[ SenaV4 Hub & OLIVER Auto Steal - Fixed Delivery & Server Accept Script ]] --
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ProximityPromptService = game:GetService("ProximityPromptService")
@@ -27,7 +27,7 @@ local function fn2()
 	return genv.__SenaV4HubSession == senaV4HubSession
 end
 
--- ប្រព័ន្ធសុវត្ថិភាព និង Anti-Tamper[span_0](start_span)[span_0](end_span)
+-- ប្រព័ន្ធសុវត្ថិភាព និង Anti-Tamper
 do
 	local tbl2 = {"hookfunction", "hookmetamethod", "getconnections", "getgc", "getrawmetatable", "firetouchinterest", "newcclosure", "getnamecallmethod", "checkcaller", "getcallingscript"}
 	local iscclosure = genv.iscclosure or rawget(_G, "iscclosure")
@@ -186,7 +186,7 @@ genv.__SenaV4NetPing = function()
 	return tonumber(n2) or 0
 end
 
--- Hover Pad System & Sena Integrity Core[span_1](start_span)[span_1](end_span)
+-- Hover Pad System & Sena Integrity Core
 local n2, n3, name, str, v3 = 8, 1, "__SenaV4HoverPad", "SenaV4RuntimeOwner"
 local str2 = tostring(math.random(100000, 999999))
 local connection, connection2
@@ -663,7 +663,7 @@ genv.__SenaV4TweenRuntimeCleanup = function()
 	fn27()
 end
 
--- Guard Presentation / Bypass[span_2](start_span)[span_2](end_span)
+-- Guard Presentation / Bypass
 pcall(function()
 	local GuardPresentationComponent = require(ReplicatedStorage.Shared.Modules.GuardAreas.GuardPresentationComponent)
 	if type(GuardPresentationComponent) == "table" then
@@ -677,7 +677,7 @@ pcall(function()
 end)
 
 ------------------------------------------------------------
--- OLIVER | Steal an Egg UI & Anti-Speed Logic Integration[span_3](start_span)[span_3](end_span)
+-- OLIVER | Steal an Egg UI & Anti-Speed Logic Integration
 ------------------------------------------------------------
 local TITLE = "OLIVER."
 local VERSION = "V3"
@@ -976,12 +976,13 @@ local function stealLoop(myToken)
 				lastUid = carried.Uid
 				Steal.status = "Delivering egg"
 				if not inSafe(root) then
-					travel(SAFE_POS, function() return stopped() or not myCarriedEgg() end)
+					travel(SAFE_POS + Vector3.new(0, 2, 0), function() return stopped() or not myCarriedEgg() end)
 				else
 					Steal.status = "Waiting for deposit"
-					root.CFrame = CFrame.new(SAFE_POS) * (root.CFrame - root.CFrame.Position)
+					-- កែតម្រូវទីតាំង និងបន្ថែមពេលរង់ចាំឱ្យ Server ទទួលយកស៊ុត (Deposit Fix)
+					root.CFrame = CFrame.new(SAFE_POS + Vector3.new(0, 1, 0))
 					root.AssemblyLinearVelocity = Vector3.zero
-					task.wait(0.1)
+					task.wait(1.0) -- បន្ថែមពេលចាំឱ្យ Server ទទួលយកស៊ុតចូល Base
 				end
 			elseif wallSealed() then
 				Steal.status = "Egg reset - waiting"
@@ -1082,7 +1083,7 @@ function Steal.set(on)
 end
 
 ------------------------------------------------------------
--- UI SETUP (Oliver Interface)[span_4](start_span)[span_4](end_span)
+-- UI SETUP (Oliver Interface)
 ------------------------------------------------------------
 local BG = Color3.fromRGB(16, 17, 24)
 local BG2 = Color3.fromRGB(22, 23, 32)
@@ -1511,4 +1512,4 @@ task.spawn(function()
 end)
 
 pcall(cfgLoad)
-print("[SenaV4 + OLIVER] Fixed Anti-Desync & Server Accept Script Initialized!")
+print("[SenaV4 + OLIVER] Fixed Anti-Desync & Delivery Fix Initialized!")
