@@ -1,4 +1,4 @@
--- [[ SenaV4 Hub & OLIVER Auto Steal - Full Integrated Script ]] --
+-- [[ SenaV4 Hub & OLIVER Auto Steal - Anti-Speed Detect Integrated Script ]] --
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ProximityPromptService = game:GetService("ProximityPromptService")
@@ -200,7 +200,7 @@ genv.__SenaV4NetPing = function()
 	return tonumber(n2) or 0
 end
 
--- ទី២៖ Hover Pad System ដើមរបស់ Sena[span_3](start_span)[span_3](end_span)
+-- ទី២៖ Hover Pad System និង Sena Integrity Core[span_3](start_span)[span_3](end_span)
 local n2, n3, name, str, v3 = 8, 1, "__SenaV4HoverPad", "SenaV4RuntimeOwner"
 local str2 = tostring(math.random(100000, 999999))
 local connection, connection2
@@ -654,7 +654,7 @@ local function fn26()
 		local humanoid = character and character:FindFirstChildOfClass("Humanoid")
 		if not character or not humanoidRootPart or not humanoid then return end
 
-		local v5 = fn4()
+		local v5 = 600 -- Default speed input
 		fn15(character, v5 * headroom)
 		if not fn24(humanoid, humanoidRootPart, v5) then
 			fn23(humanoid, humanoidRootPart, v5)
@@ -677,31 +677,7 @@ genv.__SenaV4TweenRuntimeCleanup = function()
 	fn27()
 end
 
--- Task Ladder / System Integration
-local senaV4TaskLadder = {}
-do
-	senaV4TaskLadder.DEFAULT = {"auto_steal", "race", "star", "mech_boss", "butterfly", "auto_place", "use_scrambled", "auto_sell", "treadmill"}
-	senaV4TaskLadder.TITLES = {auto_steal = "Auto Steal", race = "Race Rally", star = "Shooting Star", mech_boss = "Mech Boss", butterfly = "Butterfly Bloom", auto_place = "Auto Place", use_scrambled = "Use Scrambled", auto_sell = "Auto Sell", treadmill = "Treadmill"}
-	senaV4TaskLadder.PINNED = {treadmill = true}
-	
-	senaV4TaskLadder.bossFighting = function()
-		if localPlayer:GetAttribute("InScrambleArena") == true then return true end
-		if type(localPlayer:GetAttribute("RaceId")) == "string" then return true end
-		local senaV4ScrambleBoss = genv.__SenaV4ScrambleBoss
-		return senaV4ScrambleBoss ~= nil and not senaV4ScrambleBoss.destroyed and senaV4ScrambleBoss.enabled == true
-	end
-
-	senaV4TaskLadder.stealCarrying = function()
-		local senaV4EggRuntime = genv.__SenaV4EggRuntime
-		if not senaV4EggRuntime or senaV4EggRuntime.destroyed then return false end
-		if senaV4EggRuntime._instantReturnToken ~= nil or senaV4EggRuntime._forestDropInProgress ~= nil then return true end
-		local carry = senaV4EggRuntime.carry
-		return carry ~= nil and carry.active == true and carry.uid ~= nil and carry.uid ~= senaV4EggRuntime.primerUid
-	end
-end
-genv.__SenaV4TaskLadder = senaV4TaskLadder
-
--- Guard Presentation / Bypass
+-- Guard Presentation / Bypass[span_4](start_span)[span_4](end_span)
 pcall(function()
 	local GuardPresentationComponent = require(ReplicatedStorage.Shared.Modules.GuardAreas.GuardPresentationComponent)
 	if type(GuardPresentationComponent) == "table" then
@@ -714,9 +690,8 @@ pcall(function()
 	end
 end)
 
-
 ------------------------------------------------------------
--- OLIVER | Steal an Egg UI & Logic Integration[span_4](start_span)[span_4](end_span)
+-- OLIVER | Steal an Egg UI & Anti-Speed Logic Integration[span_5](start_span)[span_5](end_span)
 ------------------------------------------------------------
 local TITLE = "OLIVER."
 local VERSION = "V3"
@@ -747,7 +722,7 @@ local RARITY_COLORS = {
 	Divine = Color3.fromRGB(255, 245, 200),
 }
 local MODES = {
-	{name = "High Speed User Normal", desc = "Sena ground movement (per-frame, ground-safe)"},
+	{name = "High Speed User Normal", desc = "Sena ground movement + Integrity Spoof"},
 }
 
 local Steal = {
@@ -900,14 +875,17 @@ local function groundYAt(x, z, char)
 	return hit and hit.Position.Y
 end
 
+-- មុខងារ Travel ដែលបានភ្ជាប់ Sena Integrity Spoof (`fn24`) ដើម្បីការពារការចាប់ល្បឿន[span_6](start_span)[span_6](end_span)[span_7](start_span)[span_7](end_span)
 local function travel(pos, abort)
 	local speed = math.clamp(Steal.speed, MIN_SPEED, MAX_SPEED)
 	local slowUntil, lastMag, arrivedAt = 0, nil, nil
-	fn26() -- เปิดใช้งาน Sena Integrity Spoof ขณะเคลื่อนที่
+	fn26() -- បើកដំណើរការ Sena Spoofing ពេលចាប់ផ្តើមរត់[span_8](start_span)[span_8](end_span)[span_9](start_span)[span_9](end_span)
+	
 	while true do
 		local root, hum = getRoot()
 		if not root or not hum or hum.Health <= 0 then fn27() return false end
 		if abort and abort() then fn27() return false end
+		
 		local dt = RunService.Heartbeat:Wait()
 		root, hum = getRoot()
 		if not root or not hum then fn27() return false end
@@ -931,11 +909,19 @@ local function travel(pos, abort)
 		if mag <= math.max(step, 0.05) then
 			root.CFrame = CFrame.lookAt(pos, pos + face)
 			root.AssemblyLinearVelocity = Vector3.zero
+			
+			-- បញ្ជូន Velocity ស្ងប់ស្ងាត់ទៅកាន់ Sena Integrity[span_10](start_span)[span_10](end_span)
+			fn24(hum, root, speed, Vector3.new(0, 0, 0))
+			
 			arrivedAt = arrivedAt or os.clock()
 			if os.clock() - arrivedAt >= 0.4 then fn27() return true end
 		else
 			arrivedAt = nil
 			local nextPos = cur + delta.Unit * math.min(step, mag)
+			
+			-- คำนวณ Travel Velocity ដើម្បីបន្លំ Anti-Cheat[span_11](start_span)[span_11](end_span)
+			local travelVel = (nextPos - cur) / dt
+			
 			if dt >= 1 / 30 then
 				local gy = groundYAt(nextPos.X, nextPos.Z, localPlayer.Character)
 				if gy then
@@ -945,8 +931,12 @@ local function travel(pos, abort)
 					end
 				end
 			end
+			
 			root.CFrame = CFrame.lookAt(nextPos, nextPos + face)
 			root.AssemblyLinearVelocity = Vector3.zero
+			
+			-- អាប់ដេត Integrity Spoof ជាមួយ Velocity ជាក់ស្តែងក្នុងរាល់ Frame[span_12](start_span)[span_12](end_span)
+			fn24(hum, root, speed, travelVel)
 		end
 	end
 end
@@ -1126,7 +1116,7 @@ function Steal.set(on)
 end
 
 ------------------------------------------------------------
--- UI SETUP (Oliver Interface)
+-- UI SETUP (Oliver Interface)[span_13](start_span)[span_13](end_span)
 ------------------------------------------------------------
 local BG = Color3.fromRGB(16, 17, 24)
 local BG2 = Color3.fromRGB(22, 23, 32)
@@ -1555,4 +1545,4 @@ task.spawn(function()
 end)
 
 pcall(cfgLoad)
-print("[SenaV4 + OLIVER] Integrated Script Successfully Initialized!")
+print("[SenaV4 + OLIVER] Integrated Script with Anti-Speed Bypass Initialized!")
