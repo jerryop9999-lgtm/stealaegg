@@ -1,5 +1,5 @@
 -- ==========================================
--- OLIVER | Steal an Egg - Auto Steal (Delta UI Anti-Cheat Fixed)
+-- OLIVER | Steal an Egg - Mod Instant & Full Protection (Final)
 -- ==========================================
 
 local Players = game:GetService("Players")
@@ -14,8 +14,8 @@ local player = Players.LocalPlayer
 -- CONFIG
 ------------------------------------------------------------
 local TITLE = "OLIVER."
-local VERSION = "V3"
-local LOGO_ID = "rbxassetid://77896693340732" -- ← ដាក់ Logo ID របស់អ្នកនៅទីនេះ
+local VERSION = "V3.6 Mod Instant"
+local LOGO_ID = "rbxassetid://77896693340732"
 local ACCENT = Color3.fromRGB(110, 120, 255)
 
 local SAFE_POS = Vector3.new(542.93, 71.5, -405.58) -- safe area (ផ្ទះ)
@@ -32,7 +32,7 @@ local eggWorld = Remotes.EggWorld
 local okER, EggRecords = pcall(function() return require(RS.Shared.Util.EggRecords) end)
 
 ------------------------------------------------------------
--- AUTO STEAL (Anti-Cheat Safe Movement)
+-- AUTO STEAL & MOD INSTANT MODE
 ------------------------------------------------------------
 local RARITIES = {"Common", "Uncommon", "Rare", "Epic", "Legendary", "Mythic", "Cosmic", "Secret", "Eternal", "Divine"}
 local RARITY_COLORS = {
@@ -47,19 +47,14 @@ local RARITY_COLORS = {
 	Eternal = Color3.fromRGB(255, 215, 90),
 	Divine = Color3.fromRGB(255, 245, 200),
 }
-local MODES = {
-	{name = "High Speed User Normal", desc = "Safe ground movement (Anti-Cheat bypass)"},
-}
 
 local Steal = {
 	enabled = false,
 	status = "Idle",
 	target = "-",
 	carrying = false,
-	mode = "High Speed User Normal",
 	rarities = {},      
-	holdSeconds = 4,    
-	speed = 450,        -- កម្រិតល្បឿនមានសុវត្ថិភាពដើម្បីការពារ Anti-Cheat ចាប់
+	speed = 1000,         -- ល្បឿនលឿនសម្រាប់ Mod Instant
 	vip = {Secret = true, Eternal = true, Divine = true}, 
 }
 local token = 0
@@ -116,6 +111,9 @@ local function inSafe(root)
 	return Vector2.new(d.X, d.Z).Magnitude <= SAFE_RADIUS and math.abs(d.Y) <= 18
 end
 
+------------------------------------------------------------
+-- PROTECTION SYSTEM (Anti-Cheat & Anti-Death)
+------------------------------------------------------------
 local Protect = {pad = nil, conn = nil, hb = nil, autoRotate = nil}
 
 local function ensureProtect()
@@ -192,25 +190,7 @@ local function stopProtect()
 	Protect.autoRotate = nil
 end
 
-local MIN_SPEED, MAX_SPEED = 200, 800
-
-local function feetOffset(root, hum)
-	if hum.RigType == Enum.HumanoidRigType.R15 then
-		return root.Size.Y * 0.5 + math.max(hum.HipHeight, 0.5)
-	end
-	return root.Size.Y * 0.5 + 2
-end
-
-local function groundYAt(x, z, char)
-	local root = char and char:FindFirstChild("HumanoidRootPart")
-	local origin = Vector3.new(x, (root and root.Position.Y or SAFE_POS.Y) + 60, z)
-	local params = RaycastParams.new()
-	params.FilterType = Enum.RaycastFilterType.Exclude
-	params.FilterDescendantsInstances = {char}
-	params.IgnoreWater = true
-	local hit = workspace:Raycast(origin, Vector3.new(0, -300, 0), params)
-	return hit and hit.Position.Y
-end
+local MIN_SPEED, MAX_SPEED = 500, 1500
 
 local function travel(pos, abort)
 	local speed = math.clamp(Steal.speed, MIN_SPEED, MAX_SPEED)
@@ -234,7 +214,7 @@ local function travel(pos, abort)
 			or (lookFlat.Magnitude > 0.001 and lookFlat.Unit or Vector3.new(0, 0, -1))
 
 		if lastMag and mag > lastMag + 2 then
-			slowUntil = os.clock() + 0.5
+			slowUntil = os.clock() + 0.1
 		end
 		lastMag = mag
 		local curSpeed = os.clock() < slowUntil and math.max(MIN_SPEED, speed * 0.45) or speed
@@ -244,19 +224,10 @@ local function travel(pos, abort)
 			root.CFrame = CFrame.lookAt(pos, pos + face)
 			root.AssemblyLinearVelocity = Vector3.zero
 			arrivedAt = arrivedAt or os.clock()
-			if os.clock() - arrivedAt >= 0.3 then return true end
+			if os.clock() - arrivedAt >= 0.01 then return true end
 		else
 			arrivedAt = nil
 			local nextPos = cur + delta.Unit * math.min(step, mag)
-			if dt >= 1 / 30 then 
-				local gy = groundYAt(nextPos.X, nextPos.Z, player.Character)
-				if gy then
-					local minY = gy + feetOffset(root, hum)
-					if nextPos.Y < minY then
-						nextPos = Vector3.new(nextPos.X, minY, nextPos.Z)
-					end
-				end
-			end
 			root.CFrame = CFrame.lookAt(nextPos, nextPos + face)
 			root.AssemblyLinearVelocity = Vector3.zero
 		end
@@ -320,6 +291,9 @@ local function pickTarget(skip)
 	return best
 end
 
+------------------------------------------------------------
+-- MOD INSTANT LOOP (True Instant Server Call)
+------------------------------------------------------------
 local function stealLoop(myToken)
 	local lastUid
 	local skip = {}
@@ -329,7 +303,7 @@ local function stealLoop(myToken)
 		local root, hum = getRoot()
 		if not root or not hum or hum.Health <= 0 then
 			Steal.status = "Waiting for character"
-			task.wait(1)
+			task.wait(0.1)
 		else
 			ensureProtect()
 			local carried = myCarriedEgg()
@@ -337,25 +311,25 @@ local function stealLoop(myToken)
 
 			if carried then
 				lastUid = carried.Uid
-				Steal.status = "Delivering safely..."
+				Steal.status = "Mod Instant Delivering..."
 				if not inSafe(root) then
 					travel(safeTarget(), function() return stopped() or not myCarriedEgg() end)
 				else
-					Steal.status = "Waiting for deposit"
+					Steal.status = "Deposited"
 					root.CFrame = CFrame.new(safeTarget()) * (root.CFrame - root.CFrame.Position)
 					root.AssemblyLinearVelocity = Vector3.zero
-					task.wait(0.2)
+					task.wait(0.01)
 				end
 			elseif wallSealed() then
 				Steal.status = "Egg reset - waiting"
-				task.wait(0.5)
+				task.wait(0.1)
 			else
 				local target
 				if lastUid then
 					local rec = findByUid(lastUid)
 					if rec and rec.State == AreaEggs.States.Dropped then
 						target = rec
-						Steal.status = "Egg dropped - re-grabbing"
+						Steal.status = "Mod Instant Re-grabbing"
 					else
 						lastUid = nil
 					end
@@ -366,61 +340,36 @@ local function stealLoop(myToken)
 					skip = {}
 					Steal.target = "-"
 					Steal.status = "No egg found"
-					task.wait(1)
+					task.wait(0.1)
 				else
 					local rname = rarityOf(target)
 					local wtxt = string.format("%s %.1fkg", rname, weightOf(target))
 					Steal.target = wtxt
-					Steal.status = "Going to " .. wtxt
+					Steal.status = "Mod Instant Grab: " .. wtxt
 					local pos = eggPos(target)
-					local arrived = pos and travel(pos + Vector3.new(0, 3, 0), function()
+					local arrived = pos and travel(pos + Vector3.new(0, 2, 0), function()
 						if stopped() then return true end
 						local r = findByUid(target.Uid)
 						return not r or (r.State ~= AreaEggs.States.Slot and r.State ~= AreaEggs.States.Dropped)
 					end)
 
 					if arrived and not stopped() then
-						local holdPos = pos + Vector3.new(0, 3, 0)
-						local holdUntil = os.clock() + Steal.holdSeconds
-						local lost = false
-						while os.clock() < holdUntil and not stopped() do
-							Steal.status = string.format("Securing %s (%.1fs)", rname, holdUntil - os.clock())
-							local r = findByUid(target.Uid)
-							if not r or (r.State ~= AreaEggs.States.Slot and r.State ~= AreaEggs.States.Dropped) then
-								lost = true
-								break
-							end
-							local rt = getRoot()
-							if rt then
-								rt.CFrame = CFrame.new(holdPos)
-								rt.AssemblyLinearVelocity = Vector3.zero
-							end
-							task.wait(0.1)
-						end
-
-						if not lost and not stopped() then
-							Steal.status = "Grabbing " .. rname
-							local untilAt = os.clock() + 3
-							while os.clock() < untilAt and not stopped() and not myCarriedEgg() do
-								pcall(function()
-									eggWorld.AskFieldEggCarry:InvokeServer({Uid = target.Uid})
-								end)
-								task.wait(0.3)
-							end
-							if myCarriedEgg() then
-								lastUid = target.Uid
-							elseif isVip(target) then
-								Steal.status = "Retrying " .. rname
-								task.wait(0.3)
-							else
-								skip[target.Uid] = true
-							end
+						-- MOD INSTANT MODE: ហៅ Remote ភ្លាមៗដោយគ្មានការរង់ចាំ Hold Timer
+						pcall(function()
+							eggWorld.AskFieldEggCarry:InvokeServer({Uid = target.Uid})
+						end)
+						task.wait(0.01)
+						
+						if myCarriedEgg() then
+							lastUid = target.Uid
+						else
+							skip[target.Uid] = true
 						end
 					end
 				end
 			end
 		end
-		task.wait()
+		task.wait(0.01)
 	end
 	if token == myToken or not Steal.enabled then stopProtect() end
 	Steal.status = "Idle"
@@ -509,11 +458,11 @@ pcall(function()
 	if gethui then parentGui = gethui() end
 end)
 
-local old = parentGui:FindFirstChild("OliverAutoSteal")
+local old = parentGui:FindFirstChild("OliverAutoStealFinal")
 if old then old:Destroy() end
 
 local gui = new("ScreenGui", {
-	Name = "OliverAutoSteal", ResetOnSpawn = false, ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
+	Name = "OliverAutoStealFinal", ResetOnSpawn = false, ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
 }, parentGui)
 
 local main = new("Frame", {
@@ -531,8 +480,8 @@ local titleLbl = label(header, TITLE, 17, ACCENT, Enum.Font.GothamBold)
 titleLbl.Size = UDim2.new(0.5, 0, 1, 0)
 titleLbl.Position = UDim2.fromOffset(14, 0)
 local verLbl = label(header, VERSION, 13, MUTED, Enum.Font.GothamBold, Enum.TextXAlignment.Right)
-verLbl.Size = UDim2.fromOffset(40, 40)
-verLbl.Position = UDim2.new(1, -86, 0, 0)
+verLbl.Size = UDim2.new(0.5, 0, 1, 0)
+verLbl.Position = UDim2.new(0, -14, 0, 0)
 new("Frame", {Size = UDim2.new(1, 0, 0, 1), Position = UDim2.new(0, 0, 1, -1), BackgroundColor3 = STROKE, BorderSizePixel = 0}, header)
 
 local closeBtn = new("TextButton", {
@@ -621,7 +570,7 @@ end
 local toggleCard = new("Frame", {Size = UDim2.new(1, 0, 0, 56), BackgroundColor3 = PANEL, LayoutOrder = 0}, stealPage)
 corner(toggleCard, 10)
 local toggleStroke = stroke(toggleCard, STROKE, 1)
-local toggleTitle = label(toggleCard, "Auto Steal", 16, TEXT, Enum.Font.GothamBold)
+local toggleTitle = label(toggleCard, "Auto Mod Instant", 16, TEXT, Enum.Font.GothamBold)
 toggleTitle.Size = UDim2.new(1, -80, 0, 22)
 toggleTitle.Position = UDim2.fromOffset(14, 8)
 local toggleSub = label(toggleCard, "Idle", 11, MUTED)
@@ -670,7 +619,7 @@ for i, name in ipairs(RARITIES) do
 	end)
 end
 
--- Floating Button (អាចអូសបាន និង បើក/បិទ UI)
+-- Floating Button
 local hasLogo = LOGO_ID ~= "" and not LOGO_ID:match("^rbxassetid://0?$")
 local fab = new("ImageButton", {
 	Size = UDim2.fromOffset(54, 54), Position = UDim2.new(0, 16, 0.5, -27),
