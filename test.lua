@@ -709,7 +709,9 @@ local RARITY_COLORS = {
 }
 local MODES = {
 	{name = "High Speed Fly Mod", desc = "Sena Fly + Integrity Spoof + Delivery Speed 1000"},
+	{name = "Fly Mod (HoverPad)", desc = "ហោះហើរលើខ្យល់ដោយសុវត្ថិភាព មិនធ្លាក់ចូលឡាវ៉ា"}, -- ម៉ូដថ្មីដែលបានបន្ថែម
 }
+
 
 local Steal = {
 	enabled = false,
@@ -1329,7 +1331,7 @@ clearBtn.MouseButton1Click:Connect(function()
 	for _, name in ipairs(RARITIES) do renderChip(name) end
 end)
 
-local mods = makeSection(stealPage, "MOD", 2, false)
+local mods = makeSection(stealPage, "MOD", 2, true)
 local modButtons = {}
 local function renderMods()
 	for name, m in pairs(modButtons) do
