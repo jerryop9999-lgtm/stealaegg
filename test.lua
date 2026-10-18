@@ -976,7 +976,11 @@ local function stealLoop(myToken)
 				lastUid = carried.Uid
 				Steal.status = "Delivering egg"
 				if not inSafe(root) then
+					-- កាត់បន្ថយល្បឿនមកត្រឹម 180 បណ្តោះអាសន្នពេលយួរស៊ុត ដើម្បីឱ្យ Server ទទួលយកបាន (មិន Desync)
+					local oldSpeed = Steal.speed
+					Steal.speed = math.min(Steal.speed, 180)
 					travel(SAFE_POS + Vector3.new(0, 2, 0), function() return stopped() or not myCarriedEgg() end)
+					Steal.speed = oldSpeed -- ដាក់ល្បឿនដើមវិញពេលទៅរកស៊ុតបន្ទាប់
 				else
 					Steal.status = "Waiting for deposit"
 					-- កែតម្រូវទីតាំង និងបន្ថែមពេលរង់ចាំឱ្យ Server ទទួលយកស៊ុត (Deposit Fix)
@@ -988,6 +992,7 @@ local function stealLoop(myToken)
 				Steal.status = "Egg reset - waiting"
 				task.wait(0.5)
 			else
+				-- 🟢 ដាក់កូដស្វែងរក និងចាប់ស៊ុតនៅទីនេះ (ឲ្យដាច់ដោយឡែកពីពេលយួរស៊ុតរួច)
 				local target
 				if lastUid then
 					local rec = findByUid(lastUid)
@@ -1063,7 +1068,7 @@ local function stealLoop(myToken)
 						end
 					end
 				end
-			end
+			end -- បิด the main else block ឲ្យត្រូវរចនាសម្ព័ន្ធ
 		end
 		task.wait()
 	end
