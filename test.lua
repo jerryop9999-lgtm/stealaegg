@@ -194,7 +194,13 @@ local RARITY_COLORS = {
 	Eternal = Color3.fromRGB(255, 215, 90),
 	Divine = Color3.fromRGB(255, 245, 200),
 }
+local MODES = {
+	{key = "Instant", name = "Instant Steal (Recommended)", desc = "Bait guard, hop to egg, drop in Safe"},
+	{key = "Tween", name = "Tween", desc = "Tween to egg and to Safe"},
+}
+
 local Steal = {
+	mode = "Instant",
 	enabled = false,
 	status = "Idle",
 	target = "-",
@@ -243,11 +249,17 @@ local function getRoot()
 	return c and c:FindFirstChild("HumanoidRootPart"), c and c:FindFirstChildOfClass("Humanoid")
 end
 
+local function safeCFrame()
+	local x, y, z = SAFE_POS.X, SAFE_POS.Y, SAFE_POS.Z
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Exclude
+	params.FilterDescendantsInstances = {localPlayer.Character}
+	local hit = Workspace:Raycast(Vector3.new(x, y + 30, z), Vector3.new(0, -80, 0), params)
+	return CFrame.new(x, hit and hit.Position.Y + 3.2 or y, z)
+end
+
 local function getSafePos()
-	local ok, pos = pcall(function()
-		return Workspace.World.Areas.EggCarryBounds.SafeZone.Position + Vector3.new(0, 3, 0)
-		end)
-	return ok and pos or SAFE_POS
+	return safeCFrame().Position
 end
 
 local function inSafe(root)
@@ -393,6 +405,289 @@ local function pickTarget(skip)
 	return best
 end
 
+
+------------------------------------------------------------
+-- INSTANT STEAL (ពី Open.lua / Senav6.2Hub)
+-- 1) យក Primer Egg ក្នុង Forest  2) ទាញ Guard ឲ្យវាយ (Bait)
+-- 3) Hop ទៅ Egg គោលដៅ ហើយ Hover រង់ចាំ  4) Grab  5) Hop ទៅ Safe រួច Drop
+------------------------------------------------------------
+local HOP = {studs = 500, gap = 0.15, height = 40}
+local HOVER_UP = 14
+local GUARD_FRONT = 2.5
+local STRIKE_TIME = 1.5
+local KB_SPEED = 18
+
+local function tp(cf)
+    local r = getRoot()
+    if not r then return false end
+    r.AssemblyLinearVelocity = Vector3.zero
+    r.AssemblyAngularVelocity = Vector3.zero
+    r.CFrame = cf
+    r.AssemblyLinearVelocity = Vector3.zero
+    r.AssemblyAngularVelocity = Vector3.zero
+    return true
+end
+
+local function feetOffset(root, hum)
+    if hum.RigType == Enum.HumanoidRigType.R15 then
+        return root.Size.Y * 0.5 + math.max(hum.HipHeight, 0.5)
+    end
+    return root.Size.Y * 0.5 + 2
+end
+
+local function dataPing()
+    local ok, v = pcall(function()
+        return game:GetService("Stats").Network.ServerStatsItem["Data Ping"]:GetValue()
+    end)
+    return ok and tonumber(v) or 0
+end
+
+local function forestGuard()
+    local w = fn()
+    local areas = w and w:FindFirstChild("Areas")
+    local ga = areas and areas:FindFirstChild("GuardAreas")
+    local forest = ga and ga:FindFirstChild("Forest")
+    local g = forest and forest:FindFirstChild("Guard")
+    return g, g and g:FindFirstChild("HumanoidRootPart")
+end
+
+local function choosePrimer(excludeUid)
+    local _, ghrp = forestGuard()
+    local root = getRoot()
+    local origin = ghrp and ghrp.Position or (root and root.Position)
+    if not origin then return nil end
+    local best, bestScore
+    for _, rec in ipairs(readRecords()) do
+        if rec.State == AreaEggs.States.Slot and rec.AreaId == "Forest" and rec.Uid ~= excludeUid then
+            local pos = eggPos(rec)
+            if pos then
+                local score = -(pos - origin).Magnitude - rarityRank(rec) * 100
+                if not bestScore or score > bestScore then best, bestScore = rec, score end
+            end
+        end
+    end
+    return best
+end
+
+local function knockbackLanded()
+    local root, hum = getRoot()
+    if not root or not hum then return false end
+    if hum.PlatformStand or hum.Sit then return true end
+    local st = hum:GetState()
+    if st == Enum.HumanoidStateType.Ragdoll or st == Enum.HumanoidStateType.FallingDown
+        or st == Enum.HumanoidStateType.PlatformStanding then return true end
+    return root.AssemblyLinearVelocity.Magnitude > KB_SPEED
+end
+
+-- ទាញ Guard ឲ្យវាយ (Primer ក្នុងដៃ) ដល់ពេល Knockback
+local function baitGuard(primer, stopped)
+    local gmodel, ghrp = forestGuard()
+    if not ghrp then return false end
+    local collider = gmodel:FindFirstChild("Collider") or ghrp
+    local strike = Remotes.GuardPatrol and Remotes.GuardPatrol.ForestStrike
+    local anchor
+    local landed = false
+    local untilT = os.clock() + STRIKE_TIME
+    while os.clock() < untilT and not stopped() do
+        local root, hum = getRoot()
+        if not root or not hum then return false end
+        local gp = ghrp.Position
+        local look = ghrp.CFrame.LookVector * GUARD_FRONT
+        anchor = Vector3.new(gp.X + look.X, root.Position.Y, gp.Z + look.Z)
+        root.CFrame = CFrame.lookAt(anchor, Vector3.new(gp.X, anchor.Y, gp.Z))
+        root.AssemblyLinearVelocity = Vector3.zero
+        if firetouchinterest then
+            pcall(function()
+                firetouchinterest(root, collider, 0)
+                firetouchinterest(root, collider, 1)
+            end)
+        end
+        if strike then
+            pcall(function() strike:FireServer({EggUid = primer.Uid, GuardCFrame = ghrp.CFrame}) end)
+        end
+        local t = os.clock() + 0.05
+        while os.clock() < t do
+            if knockbackLanded() then landed = true break end
+            RunService.Heartbeat:Wait()
+        end
+        if landed then break end
+    end
+    if landed then
+        local settleEnd = os.clock() + 0.35
+        while os.clock() < settleEnd and not stopped() do
+            local root, hum = getRoot()
+            if not root then return false end
+            if hum then
+                pcall(function()
+                    hum.PlatformStand = false
+                    hum.Sit = false
+                    hum:ChangeState(Enum.HumanoidStateType.GettingUp)
+                end)
+            end
+            if anchor then root.CFrame = CFrame.new(anchor) end
+            root.AssemblyLinearVelocity = Vector3.zero
+            root.AssemblyAngularVelocity = Vector3.zero
+            RunService.Heartbeat:Wait()
+        end
+    end
+    return landed, anchor
+end
+
+-- Hop ជាជំហាន 500 studs នៅកម្ពស់ +40 (ដូច _hopRoot ក្នុង Open.lua)
+local function hopRoot(cf, abort)
+    local r0, h0 = getRoot()
+    if not r0 or not h0 then return false end
+    pcall(function() h0.AutoRotate = false end)
+    local target = cf.Position
+    local cruiseY = target.Y + HOP.height
+    local deadline = os.clock() + 20
+    while os.clock() < deadline do
+        local r, h = getRoot()
+        if not r or not h or h.Health <= 0 or (abort and abort()) then return false end
+        local p = r.Position
+        local flat = Vector3.new(target.X - p.X, 0, target.Z - p.Z)
+        if flat.Magnitude <= HOP.studs then
+            return tp(cf)
+        end
+        local np = Vector3.new(p.X, cruiseY, p.Z) + flat.Unit * HOP.studs
+        local c2 = CFrame.new(np, np + flat.Unit)
+        tp(c2)
+        local gapEnd = os.clock() + HOP.gap
+        while os.clock() < gapEnd do
+            RunService.Heartbeat:Wait()
+            local r2, h2 = getRoot()
+            if not r2 or not h2 or (abort and abort()) then return false end
+            tp(c2)
+        end
+    end
+    return false
+end
+
+local function settleSeconds(areaId)
+    local s = tostring(areaId or ""):lower()
+    local a, b = 8, 3.5
+    if s:find("enchanted") then a, b = 18, 12
+    elseif s:find("light") or s:find("dark") then a, b = 16, 10
+    elseif s:find("titan") or s:find("cosmic") or s:find("cherry") then a, b = 10, 8 end
+    local hold = math.clamp(tonumber(Steal.holdSeconds) or 5, 1, 10)
+    local secs = math.max(b, a * ((11 - hold) / 6))
+    if dataPing() > 300 then secs += 1 end
+    return secs
+end
+
+local function requestGrab(rec, secs, stopped)
+    local untilAt = os.clock() + secs
+    while os.clock() < untilAt and not stopped() do
+        if myCarriedEgg() then return true end
+        pcall(function() eggWorld.AskFieldEggCarry:InvokeServer({Uid = rec.Uid}) end)
+        task.wait(0.15)
+    end
+    return myCarriedEgg() ~= nil
+end
+
+-- return: true = កាន់ Egg គោលដៅហើយ | false = បរាជ័យ | "retry" = ព្យាយាមម្ដងទៀត (មិន Skip)
+local function instantSteal(target, stopped, skip)
+    local rname = rarityOf(target)
+    local function gone(uid)
+        local r = findByUid(uid)
+        return not r or (r.State ~= AreaEggs.States.Slot and r.State ~= AreaEggs.States.Dropped)
+    end
+
+    -- 1. Primer
+    local primer = choosePrimer(target.Uid)
+    if not primer then
+        Steal.status = "Preparing steal"
+        task.wait(0.25)
+        return "retry"
+    end
+    local root, hum = getRoot()
+    local ppos = eggPos(primer)
+    if not root or not hum or not ppos then return "retry" end
+    skip[primer.Uid] = true
+
+    Steal.status = "Priming guard"
+    local primeCF = CFrame.new(ppos + Vector3.new(0, feetOffset(root, hum) + 0.15, 0))
+    tp(primeCF)
+    local got = false
+    local untilAt = os.clock() + 3
+    while os.clock() < untilAt and not stopped() do
+        if myCarriedEgg() then got = true break end
+        tp(primeCF)
+        pcall(function() eggWorld.AskFieldEggCarry:InvokeServer({Uid = primer.Uid}) end)
+        task.wait(0.15)
+    end
+    if stopped() then return false end
+    if not got then return "retry" end
+
+    -- 2. Bait guard
+    Steal.status = "Baiting guard"
+    local landed, anchor = baitGuard(primer, stopped)
+    local c = myCarriedEgg()
+    if c and c.Uid == primer.Uid then
+        pcall(EggState.DropFieldEgg, "PlayerRequest")
+        task.wait(0.1)
+    end
+    if stopped() then return false end
+    if not landed then return "retry" end
+
+    -- 3. Hunt target
+    if gone(target.Uid) then return "retry" end
+    local r = findByUid(target.Uid)
+    local tpos = r and eggPos(r)
+    root, hum = getRoot()
+    if not tpos or not root or not hum then return "retry" end
+    if anchor then tp(CFrame.new(anchor)) end
+
+    local dest = CFrame.new(tpos + Vector3.new(0, feetOffset(root, hum) + 0.15, 0))
+    local hover = dest + Vector3.new(0, HOVER_UP, 0)
+    local function abort() return stopped() or gone(target.Uid) end
+
+    Steal.status = "Heading to " .. rname
+    if not hopRoot(hover, abort) then return "retry" end
+
+    local secs = settleSeconds(r.AreaId)
+    local untilT = os.clock() + secs
+    while os.clock() < untilT do
+        if abort() then
+            if stopped() then return false end
+            return "retry"
+        end
+        Steal.status = string.format("Securing %s (%.1fs)", rname, math.max(0, untilT - os.clock()))
+        tp(hover)
+        RunService.Heartbeat:Wait()
+    end
+
+    if not hopRoot(dest, abort) then return "retry" end
+    Steal.status = "Grabbing " .. rname
+    return requestGrab(target, 3, stopped)
+end
+
+local function instantDeliver(stopped)
+    local sc = safeCFrame()
+    for _ = 1, 3 do
+        if stopped() or not myCarriedEgg() then break end
+        Steal.status = "Bringing egg home"
+        hopRoot(sc, function() return stopped() or not myCarriedEgg() end)
+        if stopped() then return end
+        if myCarriedEgg() then
+            local ping = 0.05
+            pcall(function() ping = localPlayer:GetNetworkPing() or 0.05 end)
+            task.wait(math.clamp(0.5 + ping * 4, 0.8, 2))
+            if stopped() then return end
+            if myCarriedEgg() then
+                Steal.status = "Dropping egg in Safe"
+                pcall(EggState.DropFieldEgg, "PlayerRequest")
+            end
+            local t = os.clock() + 0.85
+            while not stopped() and myCarriedEgg() and os.clock() < t do
+                RunService.Heartbeat:Wait()
+            end
+        end
+        if not myCarriedEgg() then break end
+    end
+    task.wait(0.4)
+end
+
 local function stealLoop(myToken)
 	local lastUid
 	local skip = {}
@@ -411,7 +706,10 @@ local function stealLoop(myToken)
 			if carried then
 				lastUid = carried.Uid
 				Steal.status = string.format("Delivering egg (Speed %d)", Steal.deliverSpeed)
-				if not inSafe(root) then
+				if Steal.mode == "Instant" then
+					instantDeliver(stopped)
+					lastUid = nil
+				elseif not inSafe(root) then
 					local oldSpeed = Steal.speed
 					Steal.speed = Steal.deliverSpeed
 					travel(getSafePos(), function() return stopped() or not myCarriedEgg() end)
@@ -443,6 +741,13 @@ local function stealLoop(myToken)
 					Steal.target = "-"
 					Steal.status = "No egg found"
 					task.wait(1)
+				elseif Steal.mode == "Instant" then
+					local res = instantSteal(target, stopped, skip)
+					if res == true then
+						lastUid = target.Uid
+					elseif res == false and not stopped() and not isVip(target) then
+						skip[target.Uid] = true
+					end
 				else
 					local rname = rarityOf(target)
 					local wtxt = string.format("%s %.1fkg", rname, weightOf(target))
@@ -763,6 +1068,37 @@ clearBtn.MouseButton1Click:Connect(function()
 	for _, name in ipairs(RARITIES) do renderChip(name) end
 end)
 
+local mods = makeSection(stealPage, "Steal Mode", 2, true)
+local modButtons = {}
+local function renderMods()
+	for key, m in pairs(modButtons) do
+		local on = key == Steal.mode
+		tween(m.btn, 0.12, {BackgroundColor3 = on and Color3.fromRGB(48, 52, 96) or PANEL2})
+		m.stroke.Color = on and ACCENT or PANEL2
+		m.dot.BackgroundColor3 = on and ACCENT or STROKE
+	end
+end
+for i, m in ipairs(MODES) do
+	local b = new("TextButton", {
+		Size = UDim2.new(1, 0, 0, 42), BackgroundColor3 = PANEL2, Text = "", AutoButtonColor = false, LayoutOrder = i,
+	}, mods)
+	corner(b, 8)
+	local st = stroke(b, PANEL2, 1.5)
+	local n = label(b, m.name, 13, TEXT, Enum.Font.GothamBold)
+	n.Size = UDim2.new(1, -40, 0, 18)
+	n.Position = UDim2.fromOffset(12, 5)
+	local d = label(b, m.desc, 11, MUTED)
+	d.Size = UDim2.new(1, -40, 0, 14)
+	d.Position = UDim2.fromOffset(12, 23)
+	local dot = new("Frame", {Size = UDim2.fromOffset(12, 12), Position = UDim2.new(1, -24, 0.5, -6), BackgroundColor3 = STROKE}, b)
+	corner(dot, 6)
+	modButtons[m.key] = {btn = b, stroke = st, dot = dot}
+	b.MouseButton1Click:Connect(function()
+		Steal.mode = m.key
+		renderMods()
+	end)
+end
+renderMods()
 for _, name in ipairs(RARITIES) do renderChip(name) end
 
 local refreshers = {}
@@ -813,6 +1149,7 @@ local function cfgNotify(text, good)
 end
 
 local function refreshAll()
+	renderMods()
 	for _, name in ipairs(RARITIES) do renderChip(name) end
 	for _, f in ipairs(refreshers) do f() end
 end
@@ -820,6 +1157,7 @@ end
 local function cfgReset()
 	Steal.rarities = {}
 	Steal.holdSeconds = 0
+	Steal.mode = "Instant"
 	Steal.speed = 300
 	Steal.deliverSpeed = 450
 	refreshAll()
@@ -830,7 +1168,7 @@ local function cfgSave()
 	local rars = {}
 	for n in pairs(Steal.rarities) do table.insert(rars, n) end
 	local data = {
-		rarities = rars, hold = Steal.holdSeconds, speed = Steal.speed, deliver = Steal.deliverSpeed,
+		mode = Steal.mode, rarities = rars, hold = Steal.holdSeconds, speed = Steal.speed, deliver = Steal.deliverSpeed,
 	}
 	local ok, err = pcall(function() writefile(CONFIG_FILE, HttpService:JSONEncode(data)) end)
 	return ok, ok and "Saved" or tostring(err)
@@ -841,6 +1179,9 @@ local function cfgLoad()
 	if not isfile(CONFIG_FILE) then return false, "No saved config" end
 	local ok, data = pcall(function() return HttpService:JSONDecode(readfile(CONFIG_FILE)) end)
 	if not ok or type(data) ~= "table" then return false, "Config file is invalid" end
+	for _, m in ipairs(MODES) do
+		if m.key == data.mode then Steal.mode = m.key end
+	end
 	Steal.rarities = {}
 	for _, n in ipairs(type(data.rarities) == "table" and data.rarities or {}) do
 		if RARITY_COLORS[n] then Steal.rarities[n] = true end
@@ -917,4 +1258,4 @@ task.spawn(function()
 end)
 
 pcall(cfgLoad)
-print("[OLIVER] Tween Auto Steal Initialized!")
+print("[OLIVER] Auto Steal (Instant + Tween) Initialized!")
