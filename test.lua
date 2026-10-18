@@ -720,6 +720,7 @@ local Steal = {
 	rarities = {},
 	holdSeconds = 5,
 	speed = 350, -- ល្បឿនពេលទៅយក Egg (តាមการកំណត់ក្នុង UI/Game)
+	deliverSpeed = 450, -- ល្បឿនពេលដឹកពងមក Base (រក Sweet spot: 350 ត្រូវ Guard តាម / 600 Server បដិសេធ)
 	vip = {Secret = true, Eternal = true, Divine = true},
 }
 local token = 0
@@ -760,8 +761,15 @@ local function getRoot()
 	return c and c:FindFirstChild("HumanoidRootPart"), c and c:FindFirstChildOfClass("Humanoid")
 end
 
+local function getSafePos()
+	local ok, pos = pcall(function()
+		return Workspace.World.Areas.EggCarryBounds.SafeZone.Position + Vector3.new(0, 3, 0)
+		end)
+	return ok and pos or SAFE_POS
+end
+
 local function inSafe(root)
-	local d = root.Position - SAFE_POS
+	local d = root.Position - getSafePos()
 	return Vector2.new(d.X, d.Z).Magnitude <= SAFE_RADIUS and math.abs(d.Y) <= 18
 end
 
@@ -974,16 +982,14 @@ local function stealLoop(myToken)
 
 			if carried then
 				lastUid = carried.Uid
-				Steal.status = "Delivering egg (Speed 1000)"
+				Steal.status = string.format("Delivering egg (Speed %d)", Steal.deliverSpeed)
 				if not inSafe(root) then
-					-- 🚀 កំណត់ល្បឿនមក Base វិញ ឱ្យលឿនបំផុត 1000
 					local oldSpeed = Steal.speed
-					Steal.speed = 600 
-					travel(SAFE_POS + Vector3.new(0, 2, 0), function() return stopped() or not myCarriedEgg() end)
+					Steal.speed = Steal.deliverSpeed
+					travel(getSafePos(), function() return stopped() or not myCarriedEgg() end)
 					Steal.speed = oldSpeed
 				else
 					Steal.status = "Waiting for deposit"
-					root.CFrame = CFrame.new(SAFE_POS + Vector3.new(0, 1, 0))
 					root.AssemblyLinearVelocity = Vector3.zero
 					task.wait(0.3) -- ពេលរង់ចាំខ្លីឱ្យ Server ទទួលស៊ុតចូល Base
 				end
@@ -1392,6 +1398,7 @@ end
 local tweenCfg = makeSection(settingsPage, "Movement Settings", 1, true)
 addStepper(tweenCfg, 1, "Hold at egg", function() return Steal.holdSeconds end, function(v) Steal.holdSeconds = v end, 1, 10, 1, "s")
 addStepper(tweenCfg, 2, "Speed (To Egg)", function() return Steal.speed end, function(v) Steal.speed = v end, MIN_SPEED, MAX_SPEED, 50, "")
+addStepper(tweenCfg, 3, "Speed (Deliver)", function() return Steal.deliverSpeed end, function(v) Steal.deliverSpeed = v end, MIN_SPEED, MAX_SPEED, 50, "")
 
 local CONFIG_FILE = "OLIVER_AutoSteal.json"
 local cfgSection = makeSection(settingsPage, "Config", 2, true)
@@ -1419,6 +1426,7 @@ local function cfgReset()
 	Steal.rarities = {}
 	Steal.holdSeconds = 0
 	Steal.speed = 300
+	Steal.deliverSpeed = 450
 	refreshAll()
 end
 
@@ -1427,7 +1435,7 @@ local function cfgSave()
 	local rars = {}
 	for n in pairs(Steal.rarities) do table.insert(rars, n) end
 	local data = {
-		mode = Steal.mode, rarities = rars, hold = Steal.holdSeconds, speed = Steal.speed,
+		mode = Steal.mode, rarities = rars, hold = Steal.holdSeconds, speed = Steal.speed, deliver = Steal.deliverSpeed,
 	}
 	local ok, err = pcall(function() writefile(CONFIG_FILE, HttpService:JSONEncode(data)) end)
 	return ok, ok and "Saved" or tostring(err)
@@ -1447,6 +1455,7 @@ local function cfgLoad()
 	end
 	Steal.holdSeconds = math.clamp(tonumber(data.hold) or 5, 1, 10)
 	Steal.speed = math.clamp(tonumber(data.speed) or 350, MIN_SPEED, MAX_SPEED)
+	Steal.deliverSpeed = math.clamp(tonumber(data.deliver) or 450, MIN_SPEED, MAX_SPEED)
 	refreshAll()
 	return true, "Loaded"
 end
