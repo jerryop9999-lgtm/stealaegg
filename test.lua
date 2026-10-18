@@ -1,11 +1,22 @@
--- Steal an Egg | UI + Auto Steal (ទាញពី Senav6.2Hub)
--- ដាក់ដំណើរការតាម executor (ត្រូវការ require ក្នុង ReplicatedStorage)
+-- OLIVER | Steal an Egg  -  Auto Steal (Tween)
+-- ដំណើរការតាម executor (ត្រូវការ require ក្នុង ReplicatedStorage)
 
 local Players = game:GetService("Players")
 local UIS = game:GetService("UserInputService")
 local RS = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
+local RunService = game:GetService("RunService")
 local player = Players.LocalPlayer
+
+------------------------------------------------------------
+-- CONFIG
+------------------------------------------------------------
+local TITLE = "OLIVER"
+local LOGO_ID = "rbxassetid://0" -- ← ដាក់ Logo ID របស់អ្នកនៅទីនេះ (ឧ. "rbxassetid://123456789")
+local ACCENT = Color3.fromRGB(110, 120, 255)
+
+local SAFE_POS = Vector3.new(542.93, 71.5, -405.58) -- safe area (ផ្ទះ)
+local SAFE_RADIUS = 30
 
 ------------------------------------------------------------
 -- Modules របស់ហ្គេម (ដូចក្នុង Sena)
@@ -13,35 +24,75 @@ local player = Players.LocalPlayer
 local EggState = require(RS.Client.EggState)
 local Remotes = require(RS.Shared.Remotes)
 local AreaEggs = require(RS.Shared.Types.AreaEggs)
-local eggWorld = Remotes.EggWorld
 local Assets = require(RS.Data.Assets)
-local Ragdoll = require(RS.Shared.Modules.Ragdoll)
-
-local SAFE_POS = Vector3.new(542.93, 71.5, -405.58) -- safe area (ផ្ទះ)
-local SAFE_RADIUS = 30
+local eggWorld = Remotes.EggWorld
 
 ------------------------------------------------------------
--- AUTO STEAL
+-- AUTO STEAL (Tween)
 ------------------------------------------------------------
-local Steal = {enabled = false, speed = 300, status = "Idle", rarities = {}, avoidGuards = true, guardRadius = 70, mode = "High Speed Normal", flyHeight = 60, holdSeconds = 5, carrySpeed = 300, carrying = false, chaseVip = true, vip = {Secret = true, Eternal = true, Divine = true}, instantSpeed = 1000}
-local RARITIES = {"Common","Uncommon","Rare","Epic","Legendary","Mythic","Cosmic","Secret","Eternal","Divine"}
+local RARITIES = {"Common", "Uncommon", "Rare", "Epic", "Legendary", "Mythic", "Cosmic", "Secret", "Eternal", "Divine"}
+local RARITY_COLORS = {
+	Common = Color3.fromRGB(170, 175, 190),
+	Uncommon = Color3.fromRGB(90, 210, 120),
+	Rare = Color3.fromRGB(80, 160, 255),
+	Epic = Color3.fromRGB(170, 100, 255),
+	Legendary = Color3.fromRGB(255, 170, 60),
+	Mythic = Color3.fromRGB(255, 90, 90),
+	Cosmic = Color3.fromRGB(70, 220, 230),
+	Secret = Color3.fromRGB(255, 100, 190),
+	Eternal = Color3.fromRGB(255, 215, 90),
+	Divine = Color3.fromRGB(255, 245, 200),
+}
+local MODES = {
+	{name = "Instant Steal", speed = 600, desc = "Fastest tween, straight line"},
+	{name = "High Speed Normal", speed = 300, desc = "Ground tween (default)"},
+	{name = "High Speed (Fly)", speed = 300, desc = "Tween up, across, then down"},
+	{name = "Zig-Zag", speed = 300, desc = "Tween with side-to-side path"},
+}
 
--- ឈ្មោះ rarity របស់ស៊ុត (ដូច Sena: Assets.Directory[AssetCategory].Rarity)
+local Steal = {
+	enabled = false,
+	status = "Idle",
+	target = "-",
+	guard = "Sleeping",
+	carrying = false,
+	mode = "High Speed Normal",
+	rarities = {},      -- ទទេ = យកទាំងអស់ (ល្អបំផុតមុន)
+	holdSeconds = 5,    -- ឈរលើស៊ុតមុនយក (Sena: ~5s)
+	flyHeight = 60,
+	vip = {Secret = true, Eternal = true, Divine = true}, -- មិនរំលង ព្យាយាមរហូត
+}
+local token = 0
+
+local function modeSpeed()
+	for _, m in ipairs(MODES) do
+		if m.name == Steal.mode then return m.speed end
+	end
+	return 300
+end
+
 local function rarityOf(rec)
 	local a = Assets.Directory[rec.AssetCategory]
 	local r = a and a.Rarity
 	return r and (r.DisplayName or r._id) or "Unknown"
 end
 
+local function rarityRank(rec)
+	local name = rarityOf(rec)
+	for i, n in ipairs(RARITIES) do
+		if n == name then return i end
+	end
+	return 0
+end
+
 local function isVip(rec)
-	return Steal.chaseVip and Steal.vip[rarityOf(rec)] == true
+	return Steal.vip[rarityOf(rec)] == true
 end
 
 local function passesFilter(rec)
-	if next(Steal.rarities) == nil then return true end -- មិនជ្រើស = យកទាំងអស់
+	if next(Steal.rarities) == nil then return true end
 	return Steal.rarities[rarityOf(rec)] == true
 end
-local token = 0
 
 local function getRoot()
 	local c = player.Character
@@ -64,45 +115,44 @@ local function inSafe(root)
 	return Vector2.new(d.X, d.Z).Magnitude <= SAFE_RADIUS and math.abs(d.Y) <= 18
 end
 
--- ផ្លាស់ទីទៅទីតាំងដោយល្បឿន studs/វិនាទី (អាចបញ្ឈប់ពាក់កណ្តាលផ្លូវបាន តាម abort())
-local RunService = game:GetService("RunService")
-local function moveTo(pos, abort)
-	while true do
-		local root = getRoot()
-		if not root then return false end
-		if abort and abort() then return false end
-		local delta = pos - root.Position
-		local dist = delta.Magnitude
-		if dist < 2 then
-			root.AssemblyLinearVelocity = Vector3.zero
-			return true
+-- Tween ទៅទីតាំង (TweenService) - អាចបញ្ឈប់ពាក់កណ្តាលផ្លូវបានតាម abort()
+local function tweenTo(pos, abort)
+	local root = getRoot()
+	if not root then return false end
+	local dist = (root.Position - pos).Magnitude
+	if dist < 1 then return true end
+	local keepRot = root.CFrame - root.CFrame.Position
+	local tw = TweenService:Create(
+		root,
+		TweenInfo.new(math.max(dist / modeSpeed(), 0.03), Enum.EasingStyle.Linear),
+		{CFrame = CFrame.new(pos) * keepRot}
+	)
+	tw:Play()
+	local aborted = false
+	while tw.PlaybackState == Enum.PlaybackState.Playing or tw.PlaybackState == Enum.PlaybackState.Begin do
+		if not root.Parent or (abort and abort()) then
+			aborted = true
+			tw:Cancel()
+			break
 		end
-		local dt = RunService.Heartbeat:Wait()
-		local spd = Steal.carrying and Steal.carrySpeed or ((Steal.mode == "Instant Steal") and Steal.instantSpeed or Steal.speed)
-		local step = math.min(dist, spd * dt)
-		root.CFrame = CFrame.new(root.Position + delta.Unit * step) * (root.CFrame - root.CFrame.Position)
+		RunService.Heartbeat:Wait()
+	end
+	if root.Parent then
 		root.AssemblyLinearVelocity = Vector3.zero
 	end
+	return not aborted
 end
 
--- ជញ្ជាំង reset ស៊ុត (ពេល reset ស៊ុតត្រូវត្រឡប់ទៅកន្លែងដើម) - ដូច Sena: AreaEggResetWall.IsSealed()
-local function wallSealed()
-	local ok, res = pcall(function()
-		return require(RS.Client.AreaEggResetWall).IsSealed()
-	end)
-	return ok and res == true
-end
-
--- ជ្រើសផ្លូវធ្វើដំណើរតាម Mode: Normal / Fly / Zig-Zag
+-- ជ្រើសផ្លូវតាម MOD (ទាំងអស់ប្រើ Tween)
 local function travel(pos, abort)
 	local root = getRoot()
 	if not root then return false end
 	local mode = Steal.mode
 	if mode == "High Speed (Fly)" then
 		local alt = math.max(root.Position.Y, pos.Y) + Steal.flyHeight
-		return moveTo(Vector3.new(root.Position.X, alt, root.Position.Z), abort)
-			and moveTo(Vector3.new(pos.X, alt, pos.Z), abort)
-			and moveTo(pos, abort)
+		return tweenTo(Vector3.new(root.Position.X, alt, root.Position.Z), abort)
+			and tweenTo(Vector3.new(pos.X, alt, pos.Z), abort)
+			and tweenTo(pos, abort)
 	elseif mode == "Zig-Zag" then
 		local from = root.Position
 		local flat = Vector3.new(pos.X - from.X, 0, pos.Z - from.Z)
@@ -114,14 +164,21 @@ local function travel(pos, abort)
 			for i = 1, n do
 				local base = from + dir * (len * i / (n + 1))
 				local wp = base + side * (i % 2 == 0 and 14 or -14)
-				if not moveTo(Vector3.new(wp.X, from.Y + (pos.Y - from.Y) * i / (n + 1), wp.Z), abort) then
+				if not tweenTo(Vector3.new(wp.X, from.Y + (pos.Y - from.Y) * i / (n + 1), wp.Z), abort) then
 					return false
 				end
 			end
 		end
-		return moveTo(pos, abort)
+		return tweenTo(pos, abort)
 	end
-	return moveTo(pos, abort)
+	return tweenTo(pos, abort)
+end
+
+local function wallSealed()
+	local ok, res = pcall(function()
+		return require(RS.Client.AreaEggResetWall).IsSealed()
+	end)
+	return ok and res == true
 end
 
 local function readRecords()
@@ -149,52 +206,37 @@ local function eggPos(rec)
 	return cf and cf.Position
 end
 
-local function rarityRank(rec)
-	local name = rarityOf(rec)
-	for i, n in ipairs(RARITIES) do
-		if n == name then return i end
-	end
-	return 0
-end
-
--- ពិនិត្យ guard នៅជិតស៊ុត (ដើម្បីរំលងស៊ុតដែលមាន guard យាម)
+-- ស្ថានភាព guard (attribute GuardState: Sleeping / Waking / Chasing)
 local guardAreasFolder
-local function guardRoots()
+local function guardState()
 	if not (guardAreasFolder and guardAreasFolder.Parent) then
 		guardAreasFolder = nil
 		for _, d in ipairs(workspace:GetDescendants()) do
 			if d.Name == "GuardAreas" then guardAreasFolder = d break end
 		end
 	end
-	local list = {}
+	local name = "Sleeping"
 	if guardAreasFolder then
 		for _, area in ipairs(guardAreasFolder:GetChildren()) do
 			local g = area:FindFirstChild("Guard")
-			local r = g and (g:FindFirstChild("HumanoidRootPart") or g:FindFirstChild("Collider") or (g:IsA("Model") and g.PrimaryPart))
-			if r then table.insert(list, r) end
+			local st = g and g:GetAttribute("GuardState")
+			if st == "Waking" or st == "Chasing" then return true, st end
+			if st then name = st end
 		end
 	end
-	return list
+	return false, name
 end
 
-local function nearGuard(pos)
-	if not Steal.avoidGuards then return false end
-	for _, r in ipairs(guardRoots()) do
-		if (r.Position - pos).Magnitude <= Steal.guardRadius then return true end
-	end
-	return false
-end
-
--- ជ្រើសស៊ុត: rarity ខ្ពស់បំផុតមុន (បន្ទាប់មកជិតបំផុត) តាម filter
+-- ជ្រើសស៊ុត: rarity ខ្ពស់បំផុតមុន បន្ទាប់មកជិតបំផុត
 local function pickTarget(skip)
 	local root = getRoot()
 	if not root then return nil end
 	local best, bestRank, bestDist
 	for _, rec in ipairs(readRecords()) do
 		if (rec.State == AreaEggs.States.Slot or rec.State == AreaEggs.States.Dropped)
-		and (isVip(rec) or (not (skip and skip[rec.Uid]) and passesFilter(rec))) then
+		and passesFilter(rec) and (isVip(rec) or not skip[rec.Uid]) then
 			local pos = eggPos(rec)
-			if pos and (isVip(rec) or not nearGuard(pos)) then
+			if pos then
 				local rank = rarityRank(rec)
 				local d = (pos - root.Position).Magnitude
 				if not best or rank > bestRank or (rank == bestRank and d < bestDist) then
@@ -207,8 +249,9 @@ local function pickTarget(skip)
 end
 
 local function stealLoop(myToken)
-	local lastUid = nil   -- ស៊ុតដែលយើងទើបកាន់ (ដើម្បីរើសវិញបើធ្លាក់)
-	local skip = {}       -- ស៊ុតដែលចាប់មិនបាន ដកចេញបណ្តោះអាសន្ន
+	local lastUid
+	local calmSince
+	local skip = {}
 	local function stopped() return not Steal.enabled or token ~= myToken end
 
 	while not stopped() do
@@ -218,16 +261,17 @@ local function stealLoop(myToken)
 			task.wait(1)
 		else
 			local carried = myCarriedEgg()
+			local awake, gst = guardState()
 			Steal.carrying = carried ~= nil
+			Steal.guard = gst
+
 			if carried then
-				-- កំពុងកាន់ → យកទៅផ្ទះ ហើយបើធ្លាក់ពាក់កណ្តាលផ្លូវ បញ្ឈប់ភ្លាម
+				-- ដឹកទៅ safe area ហើយឈរចាំ server ទទួលស៊ុត
 				lastUid = carried.Uid
-				Steal.status = "Carrying home"
-				Steal.carrying = true
+				Steal.status = "Delivering egg"
 				if not inSafe(root) then
 					travel(safeTarget(), function() return stopped() or not myCarriedEgg() end)
 				else
-					-- ដល់ safe area ហើយ: ឈរនៅកន្លែង រង់ចាំ server ទទួលស៊ុត (Sena: "Waiting for deposit")
 					Steal.status = "Waiting for deposit"
 					root.CFrame = CFrame.new(safeTarget()) * (root.CFrame - root.CFrame.Position)
 					root.AssemblyLinearVelocity = Vector3.zero
@@ -236,41 +280,62 @@ local function stealLoop(myToken)
 			elseif wallSealed() then
 				Steal.status = "Egg reset - waiting"
 				task.wait(0.5)
+			elseif awake then
+				-- guard ភ្ញាក់ → ត្រឡប់ទៅ safe area រង់ចាំវាដេកវិញ
+				calmSince = nil
+				Steal.status = "Guard " .. gst .. " - waiting"
+				if not inSafe(root) then
+					travel(safeTarget(), stopped)
+				else
+					task.wait(0.3)
+				end
+			elseif (function()
+				calmSince = calmSince or os.clock()
+				return os.clock() - calmSince < 2
+			end)() then
+				Steal.status = "Guard asleep - settling"
+				task.wait(0.2)
 			else
 				local target
-				-- ស៊ុតទើបធ្លាក់ ត្រូវរើសវិញមុនគេ (បើវានៅ Dropped)
+				-- ស៊ុតទើបធ្លាក់ ត្រូវរើសវិញមុនគេ
 				if lastUid then
 					local rec = findByUid(lastUid)
 					if rec and rec.State == AreaEggs.States.Dropped then
 						target = rec
-						Steal.status = "Egg dropped! Re-grabbing"
+						Steal.status = "Egg dropped - re-grabbing"
 					else
-						lastUid = nil -- ដឹកដល់ផ្ទះ ឬត្រូវគេយក
+						lastUid = nil
 					end
 				end
 				target = target or pickTarget(skip)
 
 				if not target then
 					skip = {}
+					Steal.target = "-"
 					Steal.status = "No egg found"
 					task.wait(1)
 				else
-					Steal.status = "Going to " .. rarityOf(target)
+					local rname = rarityOf(target)
+					Steal.target = rname
+					Steal.status = "Going to " .. rname
 					local pos = eggPos(target)
 					local arrived = pos and travel(pos + Vector3.new(0, 3, 0), function()
 						if stopped() then return true end
+						if select(1, guardState()) then return true end
 						local r = findByUid(target.Uid)
 						return not r or (r.State ~= AreaEggs.States.Slot and r.State ~= AreaEggs.States.Dropped)
 					end)
+
 					if arrived and not stopped() then
-						-- ឈរនៅលើស៊ុតមួយរយៈ (Sena: StealHoldSeconds ~5s) ទើប server ឱ្យយក
+						-- ឈរជាប់លើស៊ុតមួយរយៈ ទើប server ឱ្យយក
 						local holdPos = pos + Vector3.new(0, 3, 0)
 						local holdUntil = os.clock() + Steal.holdSeconds
 						local lost = false
 						while os.clock() < holdUntil and not stopped() do
-							Steal.status = string.format("Securing egg (%.1fs)", holdUntil - os.clock())
+							Steal.status = string.format("Securing %s (%.1fs)", rname, holdUntil - os.clock())
 							local r = findByUid(target.Uid)
-							if not r or (r.State ~= AreaEggs.States.Slot and r.State ~= AreaEggs.States.Dropped) then
+							if select(1, guardState())
+							or not r or (r.State ~= AreaEggs.States.Slot and r.State ~= AreaEggs.States.Dropped) then
 								lost = true
 								break
 							end
@@ -281,8 +346,9 @@ local function stealLoop(myToken)
 							end
 							task.wait(0.1)
 						end
+
 						if not lost and not stopped() then
-							Steal.status = "Grabbing"
+							Steal.status = "Grabbing " .. rname
 							local untilAt = os.clock() + 3
 							while os.clock() < untilAt and not stopped() and not myCarriedEgg() do
 								pcall(function()
@@ -290,15 +356,13 @@ local function stealLoop(myToken)
 								end)
 								task.wait(0.3)
 							end
-						end
-						if myCarriedEgg() then
-							lastUid = target.Uid
-						else
-							if not isVip(target) then
-								skip[target.Uid] = true -- ចាប់មិនបាន រំលងសិន (Secret/Eternal/Divine មិនរំលងទេ ព្យាយាមរហូត)
-							else
-								Steal.status = "Retrying " .. rarityOf(target)
+							if myCarriedEgg() then
+								lastUid = target.Uid
+							elseif isVip(target) then
+								Steal.status = "Retrying " .. rname
 								task.wait(0.3)
+							else
+								skip[target.Uid] = true
 							end
 						end
 					end
@@ -308,6 +372,8 @@ local function stealLoop(myToken)
 		task.wait()
 	end
 	Steal.status = "Idle"
+	Steal.target = "-"
+	Steal.carrying = false
 end
 
 function Steal.set(on)
@@ -320,217 +386,46 @@ function Steal.set(on)
 end
 
 ------------------------------------------------------------
--- DIAGNOSTIC: កត់ត្រាមូលហេតុដែលស៊ុតធ្លាក់ / ត្រឡប់ទៅដើម
-------------------------------------------------------------
-local Diag = {text = "none yet", relocateAt = 0, ragdollAt = 0}
-
-local function dropReason(extra)
-	local now = os.clock()
-	local parts = {}
-	if now - Diag.relocateAt < 2 then table.insert(parts, "server Relocate") end
-	if now - Diag.ragdollAt < 2 then table.insert(parts, "ragdoll/hit") end
-	if wallSealed() then table.insert(parts, "egg reset wall") end
-	if #parts == 0 then table.insert(parts, "unknown (server decision)") end
-	Diag.text = extra .. ": " .. table.concat(parts, " + ")
-	print("[AutoSteal] " .. Diag.text)
-end
-
-pcall(function()
-	eggWorld.OwnerDropped.OnClientEvent:Connect(function() dropReason("Egg dropped") end)
-end)
-pcall(function()
-	Remotes.RigSync.Refresh.OnClientEvent:Connect(function() Diag.relocateAt = os.clock() end)
-end)
-local function watchRagdoll(c)
-	local hum = c and c:WaitForChild("Humanoid", 5)
-	if not hum then return end
-	hum.StateChanged:Connect(function(_, new)
-		if new == Enum.HumanoidStateType.Ragdoll or new == Enum.HumanoidStateType.FallingDown
-		or new == Enum.HumanoidStateType.PlatformStanding then
-			Diag.ragdollAt = os.clock()
-		end
-	end)
-end
-watchRagdoll(player.Character)
-player.CharacterAdded:Connect(watchRagdoll)
-
-------------------------------------------------------------
--- ANTI GUARD (ការពារ ragdoll / knockback ពី guard - ខាងកូនសំណាក់ client)
-------------------------------------------------------------
-local Anti = {enabled = false, orig = {}, conns = {}, gates = {}, scanned = false}
-
-local function recoverBody()
-	local c = player.Character
-	local hum = c and c:FindFirstChildOfClass("Humanoid")
-	local root = c and c:FindFirstChild("HumanoidRootPart")
-	if not (c and hum and root) then return end
-	pcall(function()
-		hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
-		hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
-		hum:SetStateEnabled(Enum.HumanoidStateType.Physics, false)
-		hum.PlatformStand = false
-		hum.Sit = false
-		local st = hum:GetState()
-		if st == Enum.HumanoidStateType.Physics or st == Enum.HumanoidStateType.FallingDown
-		or st == Enum.HumanoidStateType.Ragdoll or st == Enum.HumanoidStateType.PlatformStanding then
-			hum:ChangeState(Enum.HumanoidStateType.GettingUp)
-			hum:ChangeState(Enum.HumanoidStateType.Running)
-		end
-	end)
-	for _, d in ipairs(c:GetDescendants()) do
-		if d:IsA("Motor6D") then
-			d.Enabled = true
-		elseif (d:IsA("BallSocketConstraint") or d:IsA("HingeConstraint"))
-		and (d.Name:find("Ragdoll", 1, true) or d:GetAttribute("RagdollConstraint")) then
-			pcall(d.Destroy, d)
-		end
-	end
-	local v = root.AssemblyLinearVelocity
-	if Vector3.new(v.X, 0, v.Z).Magnitude > 80 or math.abs(v.Y) > 120 then
-		root.AssemblyLinearVelocity = Vector3.zero
-		root.AssemblyAngularVelocity = Vector3.zero
-	end
-end
-
-local function watchCharacter(c)
-	if not c then return end
-	table.insert(Anti.conns, c.DescendantAdded:Connect(function(d)
-		if not Anti.enabled then return end
-		if (d:IsA("BallSocketConstraint") or d:IsA("HingeConstraint"))
-		and (d.Name:find("Ragdoll", 1, true) or d:GetAttribute("RagdollConstraint")) then
-			pcall(d.Destroy, d)
-			recoverBody()
-		end
-	end))
-end
-
-function Anti.set(on)
-	Anti.enabled = on
-	if on then
-		-- (A) Guard ជាប់វ៉ៃ: បិទចម្ងាយវាយរបស់ guard (ដូច Sena: ResolveHitDistance = -inf)
-		pcall(function()
-			local Policy = require(RS.Shared.Modules.GuardAreas.GuardChasePolicy)
-			if Policy and type(Policy.ResolveHitDistance) == "function" and not Anti.orig.ResolveHitDistance then
-				local orig = Policy.ResolveHitDistance
-				Anti.orig.ResolveHitDistance = orig
-				Policy.ResolveHitDistance = function(...)
-					if Anti.enabled then return -math.huge end
-					return orig(...)
-				end
-			end
-		end)
-
-		-- (B) Guard attack handler (client): មិនឱ្យវាដំណើរការ ដូច្នេះមិនបាន report ការវាយទៅ server
-		if not Anti.scanned and type(getgc) == "function" then
-			Anti.scanned = true
-			task.spawn(function()
-				local ok, list = pcall(getgc, true)
-				if not ok or type(list) ~= "table" then Anti.scanned = false return end
-				for i, t in ipairs(list) do
-					if i % 20000 == 0 then RunService.Heartbeat:Wait() end
-					if type(t) == "table" and rawget(t, "_areaId") ~= nil
-					and type(rawget(t, "_attackHandler")) == "function" then
-						local orig = rawget(t, "_attackHandler")
-						table.insert(Anti.gates, {comp = t, orig = orig})
-						rawset(t, "_attackHandler", function(...)
-							if Anti.enabled then recoverBody() return end
-							return orig(...)
-						end)
-					end
-				end
-			end)
-		end
-
-		-- ចាប់ function ragdoll របស់ហ្គេម
-		for _, name in ipairs({"ApplyClientRagdoll", "Ragdoll", "TimedRagdoll", "TimedRagdollAsync"}) do
-			if type(Ragdoll[name]) == "function" and not Anti.orig[name] then
-				local orig = Ragdoll[name]
-				Anti.orig[name] = orig
-				Ragdoll[name] = function(...)
-					if Anti.enabled then recoverBody() return end
-					return orig(...)
-				end
-			end
-		end
-		if type(Ragdoll.IsRagdolled) == "function" and not Anti.orig.IsRagdolled then
-			local orig = Ragdoll.IsRagdolled
-			Anti.orig.IsRagdolled = orig
-			Ragdoll.IsRagdolled = function(c)
-				if Anti.enabled and c == player.Character then return false end
-				return orig(c)
-			end
-		end
-		watchCharacter(player.Character)
-		table.insert(Anti.conns, player.CharacterAdded:Connect(watchCharacter))
-		task.spawn(function()
-			while Anti.enabled do
-				recoverBody()
-				task.wait(0.1)
-			end
-		end)
-	else
-		for _, c in ipairs(Anti.conns) do pcall(c.Disconnect, c) end
-		Anti.conns = {}
-	end
-end
-
-------------------------------------------------------------
--- FLY (ហោះ) - ទូរស័ព្ទ: joystick ដើរ + មើលទៅលើ/ក្រោមតាម camera, ប៊ូតុង ▲▼ | PC: Space ឡើង, Shift ចុះ
-------------------------------------------------------------
-local Fly = {enabled = false, speed = 60, up = false, down = false, bv = nil, conn = nil}
-
-local function flyStop()
-	Fly.enabled = false
-	if Fly.conn then Fly.conn:Disconnect() Fly.conn = nil end
-	if Fly.bv then Fly.bv:Destroy() Fly.bv = nil end
-end
-
-function Fly.set(on)
-	flyStop()
-	if not on then return end
-	Fly.enabled = true
-	Fly.conn = RunService.RenderStepped:Connect(function()
-		local root, hum = getRoot()
-		if not root or not hum or hum.Health <= 0 then return end
-		if not Fly.bv or Fly.bv.Parent ~= root then
-			if Fly.bv then Fly.bv:Destroy() end
-			local bv = Instance.new("BodyVelocity")
-			bv.MaxForce = Vector3.new(1e9, 1e9, 1e9)
-			bv.Velocity = Vector3.zero
-			bv.Parent = root
-			Fly.bv = bv
-		end
-		local cam = workspace.CurrentCamera
-		local move = hum.MoveDirection
-		local vel = Vector3.zero
-		if move.Magnitude > 0 then
-			-- ទៅមុខ = ទិសដៅ camera (រួមទាំងទិសឡើង/ចុះ)
-			local look = cam.CFrame.LookVector
-			local flat = Vector3.new(look.X, 0, look.Z)
-			local fwd = flat.Magnitude > 0 and move:Dot(flat.Unit) or 0
-			vel = move * Fly.speed + Vector3.new(0, look.Y * fwd * Fly.speed, 0)
-		end
-		if Fly.up or UIS:IsKeyDown(Enum.KeyCode.Space) then vel += Vector3.new(0, Fly.speed, 0) end
-		if Fly.down or UIS:IsKeyDown(Enum.KeyCode.LeftShift) then vel -= Vector3.new(0, Fly.speed, 0) end
-		Fly.bv.Velocity = vel
-	end)
-end
-
-------------------------------------------------------------
 -- UI
 ------------------------------------------------------------
-local old = player.PlayerGui:FindFirstChild("MenuUI")
-if old then old:Destroy() end
+local BG = Color3.fromRGB(16, 17, 24)
+local BG2 = Color3.fromRGB(22, 23, 32)
+local PANEL = Color3.fromRGB(30, 32, 44)
+local PANEL2 = Color3.fromRGB(40, 43, 58)
+local STROKE = Color3.fromRGB(52, 55, 74)
+local TEXT = Color3.fromRGB(235, 237, 245)
+local MUTED = Color3.fromRGB(140, 146, 170)
+local GREEN = Color3.fromRGB(60, 200, 120)
 
-local gui = Instance.new("ScreenGui")
-gui.Name = "MenuUI"
-gui.ResetOnSpawn = false
-gui.Parent = player:WaitForChild("PlayerGui")
+local function new(class, props, parent)
+	local o = Instance.new(class)
+	for k, v in pairs(props or {}) do o[k] = v end
+	o.Parent = parent
+	return o
+end
+local function corner(o, r) return new("UICorner", {CornerRadius = UDim.new(0, r)}, o) end
+local function stroke(o, c, t)
+	return new("UIStroke", {Color = c, Thickness = t or 1, ApplyStrokeMode = Enum.ApplyStrokeMode.Border}, o)
+end
+local function pad(o, l, t, r, b)
+	return new("UIPadding", {
+		PaddingLeft = UDim.new(0, l), PaddingTop = UDim.new(0, t),
+		PaddingRight = UDim.new(0, r), PaddingBottom = UDim.new(0, b),
+	}, o)
+end
+local function label(parent, text, size, color, font, xalign)
+	return new("TextLabel", {
+		BackgroundTransparency = 1, Text = text, TextSize = size, TextColor3 = color or TEXT,
+		Font = font or Enum.Font.Gotham, TextXAlignment = xalign or Enum.TextXAlignment.Left,
+	}, parent)
+end
+local function tween(o, t, props)
+	TweenService:Create(o, TweenInfo.new(t, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), props):Play()
+end
 
 local function makeDraggable(handle, target)
 	local dragging, dragStart, startPos
 	local moved = false
-
 	handle.InputBegan:Connect(function(input)
 		if input.UserInputType == Enum.UserInputType.MouseButton1
 		or input.UserInputType == Enum.UserInputType.Touch then
@@ -539,13 +434,10 @@ local function makeDraggable(handle, target)
 			dragStart = input.Position
 			startPos = target.Position
 			input.Changed:Connect(function()
-				if input.UserInputState == Enum.UserInputState.End then
-					dragging = false
-				end
+				if input.UserInputState == Enum.UserInputState.End then dragging = false end
 			end)
 		end
 	end)
-
 	UIS.InputChanged:Connect(function(input)
 		if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement
 		or input.UserInputType == Enum.UserInputType.Touch) then
@@ -557,238 +449,296 @@ local function makeDraggable(handle, target)
 			)
 		end
 	end)
-
 	return function() return moved end
 end
 
-local main = Instance.new("Frame")
-main.Size = UDim2.new(0, 260, 0, 360)
-main.Position = UDim2.new(0.5, -130, 0.5, -180)
-main.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
-main.Parent = gui
-Instance.new("UICorner", main).CornerRadius = UDim.new(0, 10)
+local parentGui = player:WaitForChild("PlayerGui")
+local old = parentGui:FindFirstChild("OliverAutoSteal")
+if old then old:Destroy() end
 
-local title = Instance.new("TextLabel")
-title.Size = UDim2.new(1, 0, 0, 36)
-title.BackgroundColor3 = Color3.fromRGB(40, 40, 48)
-title.Text = "MY MENU"
-title.TextColor3 = Color3.new(1, 1, 1)
-title.Font = Enum.Font.GothamBold
-title.TextSize = 16
-title.Parent = main
-Instance.new("UICorner", title).CornerRadius = UDim.new(0, 10)
-makeDraggable(title, main)
+local gui = new("ScreenGui", {
+	Name = "OliverAutoSteal", ResetOnSpawn = false, ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
+}, parentGui)
 
-local content = Instance.new("ScrollingFrame")
-content.Size = UDim2.new(1, -10, 1, -46)
-content.Position = UDim2.new(0, 5, 0, 41)
-content.BackgroundTransparency = 1
-content.ScrollBarThickness = 3
-content.AutomaticCanvasSize = Enum.AutomaticSize.Y
-content.CanvasSize = UDim2.new()
-content.Parent = main
-Instance.new("UIListLayout", content).Padding = UDim.new(0, 6)
+-- Window
+local main = new("Frame", {
+	Size = UDim2.fromOffset(420, 260), Position = UDim2.new(0.5, -210, 0.5, -130),
+	BackgroundColor3 = BG, ClipsDescendants = true,
+}, gui)
+corner(main, 14)
+stroke(main, STROKE, 1)
+local scale = new("UIScale", {Scale = 1}, main)
 
-local toggleBtn = Instance.new("TextButton")
-toggleBtn.Size = UDim2.new(0, 50, 0, 50)
-toggleBtn.Position = UDim2.new(0, 20, 0.5, -25)
-toggleBtn.BackgroundColor3 = Color3.fromRGB(60, 120, 255)
-toggleBtn.Text = "☰"
-toggleBtn.TextColor3 = Color3.new(1, 1, 1)
-toggleBtn.TextSize = 24
-toggleBtn.Parent = gui
-Instance.new("UICorner", toggleBtn).CornerRadius = UDim.new(1, 0)
+-- Header
+local header = new("Frame", {Size = UDim2.new(1, 0, 0, 40), BackgroundColor3 = BG2}, main)
+corner(header, 14)
+new("Frame", {Size = UDim2.new(1, 0, 0, 14), Position = UDim2.new(0, 0, 1, -14), BackgroundColor3 = BG2, BorderSizePixel = 0}, header)
+local titleLbl = label(header, TITLE, 16, ACCENT, Enum.Font.GothamBold)
+titleLbl.Size = UDim2.new(0, 90, 1, 0)
+titleLbl.Position = UDim2.fromOffset(14, 0)
+local subLbl = label(header, "Auto Steal  ·  Steal an Egg", 11, MUTED)
+subLbl.Size = UDim2.new(1, -170, 1, 0)
+subLbl.Position = UDim2.fromOffset(90, 2)
+new("Frame", {Size = UDim2.new(1, 0, 0, 1), Position = UDim2.new(0, 0, 1, -1), BackgroundColor3 = STROKE, BorderSizePixel = 0}, header)
 
-local wasMoved = makeDraggable(toggleBtn, toggleBtn)
-toggleBtn.MouseButton1Click:Connect(function()
-	if not wasMoved() then
-		main.Visible = not main.Visible
+local closeBtn = new("TextButton", {
+	Size = UDim2.fromOffset(28, 28), Position = UDim2.new(1, -36, 0, 6),
+	BackgroundColor3 = PANEL, Text = "✕", TextColor3 = MUTED, TextSize = 14,
+	Font = Enum.Font.GothamBold, AutoButtonColor = false,
+}, header)
+corner(closeBtn, 8)
+makeDraggable(header, main)
+
+-- Tab rail
+local body = new("Frame", {Size = UDim2.new(1, 0, 1, -40), Position = UDim2.fromOffset(0, 40), BackgroundTransparency = 1}, main)
+local rail = new("Frame", {Size = UDim2.new(0, 104, 1, 0), BackgroundTransparency = 1, BorderSizePixel = 0}, body)
+new("Frame", {Size = UDim2.new(0, 1, 1, 0), Position = UDim2.new(1, -1, 0, 0), BackgroundColor3 = STROKE, BorderSizePixel = 0}, rail)
+pad(rail, 8, 10, 8, 8)
+new("UIListLayout", {Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder}, rail)
+
+local pagesHolder = new("Frame", {Size = UDim2.new(1, -104, 1, 0), Position = UDim2.fromOffset(104, 0), BackgroundTransparency = 1}, body)
+
+local tabs = {}
+local function selectTab(name)
+	for n, t in pairs(tabs) do
+		local on = n == name
+		t.page.Visible = on
+		tween(t.btn, 0.15, {BackgroundTransparency = on and 0 or 1, BackgroundColor3 = on and PANEL2 or PANEL})
+		t.btn.TextColor3 = on and TEXT or MUTED
+		t.bar.Visible = on
 	end
+end
+local function addTab(name, glyph, order)
+	local btn = new("TextButton", {
+		Size = UDim2.new(1, 0, 0, 34), BackgroundColor3 = PANEL, BackgroundTransparency = 1,
+		Text = "  " .. glyph .. "  " .. name, TextColor3 = MUTED, TextSize = 13,
+		Font = Enum.Font.GothamMedium, TextXAlignment = Enum.TextXAlignment.Left,
+		AutoButtonColor = false, LayoutOrder = order,
+	}, rail)
+	corner(btn, 8)
+	local bar = new("Frame", {Size = UDim2.new(0, 3, 0, 18), Position = UDim2.new(0, 0, 0.5, -9), BackgroundColor3 = ACCENT, Visible = false}, btn)
+	corner(bar, 2)
+	local page = new("ScrollingFrame", {
+		Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, BorderSizePixel = 0,
+		ScrollBarThickness = 3, ScrollBarImageColor3 = STROKE, CanvasSize = UDim2.new(),
+		AutomaticCanvasSize = Enum.AutomaticSize.Y, Visible = false,
+	}, pagesHolder)
+	pad(page, 10, 10, 12, 10)
+	new("UIListLayout", {Padding = UDim.new(0, 8), SortOrder = Enum.SortOrder.LayoutOrder}, page)
+	tabs[name] = {btn = btn, page = page, bar = bar}
+	btn.MouseButton1Click:Connect(function() selectTab(name) end)
+	return page
+end
+
+local stealPage = addTab("Steal", "◆", 1)
+local statusPage = addTab("Status", "●", 2)
+
+-- Collapsible card (↑ = ปิด / ↓ = เปิด)
+local function makeSection(parent, title, order, startOpen)
+	local card = new("Frame", {
+		Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y,
+		BackgroundColor3 = PANEL, LayoutOrder = order,
+	}, parent)
+	corner(card, 10)
+	stroke(card, STROKE, 1)
+	new("UIListLayout", {SortOrder = Enum.SortOrder.LayoutOrder}, card)
+
+	local head = new("TextButton", {
+		Size = UDim2.new(1, 0, 0, 38), BackgroundTransparency = 1, Text = "", AutoButtonColor = false, LayoutOrder = 1,
+	}, card)
+	local t = label(head, title, 14, TEXT, Enum.Font.GothamBold)
+	t.Size = UDim2.new(1, -50, 1, 0)
+	t.Position = UDim2.fromOffset(12, 0)
+	local arrow = label(head, startOpen and "↓" or "↑", 18, ACCENT, Enum.Font.GothamBold, Enum.TextXAlignment.Center)
+	arrow.Size = UDim2.fromOffset(30, 38)
+	arrow.Position = UDim2.new(1, -38, 0, 0)
+
+	local content = new("Frame", {
+		Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y,
+		BackgroundTransparency = 1, Visible = startOpen, LayoutOrder = 2,
+	}, card)
+	pad(content, 10, 0, 10, 10)
+	new("UIListLayout", {Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder}, content)
+
+	head.MouseButton1Click:Connect(function()
+		content.Visible = not content.Visible
+		arrow.Text = content.Visible and "↓" or "↑"
+	end)
+	return content
+end
+
+-- Auto Steal switch card
+local toggleCard = new("Frame", {Size = UDim2.new(1, 0, 0, 56), BackgroundColor3 = PANEL, LayoutOrder = 0}, stealPage)
+corner(toggleCard, 10)
+local toggleStroke = stroke(toggleCard, STROKE, 1)
+local toggleTitle = label(toggleCard, "Auto Steal", 16, TEXT, Enum.Font.GothamBold)
+toggleTitle.Size = UDim2.new(1, -80, 0, 22)
+toggleTitle.Position = UDim2.fromOffset(14, 8)
+local toggleSub = label(toggleCard, "Idle", 11, MUTED)
+toggleSub.Size = UDim2.new(1, -80, 0, 16)
+toggleSub.Position = UDim2.fromOffset(14, 31)
+toggleSub.TextTruncate = Enum.TextTruncate.AtEnd
+
+local pill = new("Frame", {Size = UDim2.fromOffset(46, 24), Position = UDim2.new(1, -60, 0.5, -12), BackgroundColor3 = PANEL2}, toggleCard)
+corner(pill, 12)
+local knob = new("Frame", {Size = UDim2.fromOffset(18, 18), Position = UDim2.fromOffset(3, 3), BackgroundColor3 = TEXT}, pill)
+corner(knob, 9)
+local toggleBtn = new("TextButton", {Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, Text = "", ZIndex = 5}, toggleCard)
+
+local function renderToggle(on)
+	tween(pill, 0.15, {BackgroundColor3 = on and GREEN or PANEL2})
+	tween(knob, 0.15, {Position = on and UDim2.fromOffset(25, 3) or UDim2.fromOffset(3, 3)})
+	tween(toggleStroke, 0.15, {Color = on and GREEN or STROKE})
+end
+toggleBtn.MouseButton1Click:Connect(function()
+	Steal.set(not Steal.enabled)
+	renderToggle(Steal.enabled)
 end)
 
-local function addToggle(name, callback, default)
-	local state = default == true
-	local b = Instance.new("TextButton")
-	b.Size = UDim2.new(1, 0, 0, 34)
-	b.BackgroundColor3 = Color3.fromRGB(50, 50, 58)
-	b.Text = name .. ": " .. (state and "ON" or "OFF")
-	b.BackgroundColor3 = state and Color3.fromRGB(40, 160, 90) or Color3.fromRGB(50, 50, 58)
-	b.TextColor3 = Color3.new(1, 1, 1)
-	b.Font = Enum.Font.Gotham
-	b.TextSize = 14
-	b.Parent = content
-	Instance.new("UICorner", b)
+-- Filters / Rarity
+local filters = makeSection(stealPage, "Filters / Rarity", 1, false)
+local hintRow = new("Frame", {Size = UDim2.new(1, 0, 0, 22), BackgroundTransparency = 1, LayoutOrder = 1}, filters)
+local hint = label(hintRow, "None selected = best rarity first", 11, MUTED)
+hint.Size = UDim2.new(1, -60, 1, 0)
+local clearBtn = new("TextButton", {
+	Size = UDim2.fromOffset(52, 22), Position = UDim2.new(1, -52, 0, 0), BackgroundColor3 = PANEL2,
+	Text = "Clear", TextColor3 = TEXT, TextSize = 11, Font = Enum.Font.GothamMedium, AutoButtonColor = false,
+}, hintRow)
+corner(clearBtn, 6)
+
+local grid = new("Frame", {Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1, LayoutOrder = 2}, filters)
+new("UIGridLayout", {CellSize = UDim2.new(1 / 3, -5, 0, 28), CellPadding = UDim2.fromOffset(6, 6), SortOrder = Enum.SortOrder.LayoutOrder}, grid)
+
+local chips = {}
+local function renderChip(name)
+	local c = chips[name]
+	local on = Steal.rarities[name] == true
+	local col = RARITY_COLORS[name]
+	tween(c.btn, 0.12, {BackgroundColor3 = on and col or PANEL2})
+	c.btn.TextColor3 = on and Color3.fromRGB(20, 20, 28) or col
+end
+for i, name in ipairs(RARITIES) do
+	local b = new("TextButton", {
+		BackgroundColor3 = PANEL2, Text = name, TextSize = 12, Font = Enum.Font.GothamMedium,
+		TextColor3 = RARITY_COLORS[name], AutoButtonColor = false, LayoutOrder = i,
+	}, grid)
+	corner(b, 7)
+	chips[name] = {btn = b}
 	b.MouseButton1Click:Connect(function()
-		state = not state
-		b.Text = name .. ": " .. (state and "ON" or "OFF")
-		b.BackgroundColor3 = state and Color3.fromRGB(40, 160, 90) or Color3.fromRGB(50, 50, 58)
-		callback(state)
+		Steal.rarities[name] = (not Steal.rarities[name]) or nil
+		renderChip(name)
 	end)
 end
-
-local statusLabel = Instance.new("TextLabel")
-statusLabel.Size = UDim2.new(1, 0, 0, 22)
-statusLabel.BackgroundTransparency = 1
-statusLabel.Text = "Status: Idle"
-statusLabel.TextColor3 = Color3.fromRGB(180, 180, 190)
-statusLabel.Font = Enum.Font.Gotham
-statusLabel.TextSize = 12
-statusLabel.Parent = content
-
-local dropLabel = Instance.new("TextLabel")
-dropLabel.Size = UDim2.new(1, 0, 0, 34)
-dropLabel.BackgroundTransparency = 1
-dropLabel.TextWrapped = true
-dropLabel.TextXAlignment = Enum.TextXAlignment.Left
-dropLabel.Text = "Last drop: none yet"
-dropLabel.TextColor3 = Color3.fromRGB(255, 180, 120)
-dropLabel.Font = Enum.Font.Gotham
-dropLabel.TextSize = 11
-dropLabel.Parent = content
-
-addToggle("Auto Steal", Steal.set)
-
--- ជ្រើស Mode របស់ Auto Steal
-local modes = {"Instant Steal", "High Speed Normal", "High Speed (Fly)", "Zig-Zag"}
-local mi = 2
-local modeBtn = Instance.new("TextButton")
-modeBtn.Size = UDim2.new(1, 0, 0, 34)
-modeBtn.BackgroundColor3 = Color3.fromRGB(70, 60, 140)
-modeBtn.Text = "Mode: High Speed Normal  ▼"
-modeBtn.TextColor3 = Color3.new(1, 1, 1)
-modeBtn.Font = Enum.Font.GothamBold
-modeBtn.TextSize = 14
-modeBtn.Parent = content
-Instance.new("UICorner", modeBtn)
-modeBtn.MouseButton1Click:Connect(function()
-	mi = mi % #modes + 1
-	Steal.mode = modes[mi]
-	modeBtn.Text = "Mode: " .. Steal.mode .. "  ▼"
+clearBtn.MouseButton1Click:Connect(function()
+	Steal.rarities = {}
+	for _, name in ipairs(RARITIES) do renderChip(name) end
 end)
--- ពេលឈរនៅលើស៊ុតមុនយក (វិនាទី) - Sena លំនាំដើម 5
-local holds = {1, 2, 3, 5, 7, 10}
-local hi = 4
-local holdBtn = Instance.new("TextButton")
-holdBtn.Size = UDim2.new(1, 0, 0, 34)
-holdBtn.BackgroundColor3 = Color3.fromRGB(70, 60, 140)
-holdBtn.Text = "Hold: 5s  ▼"
-holdBtn.TextColor3 = Color3.new(1, 1, 1)
-holdBtn.Font = Enum.Font.GothamBold
-holdBtn.TextSize = 14
-holdBtn.Parent = content
-Instance.new("UICorner", holdBtn)
-holdBtn.MouseButton1Click:Connect(function()
-	hi = hi % #holds + 1
-	Steal.holdSeconds = holds[hi]
-	holdBtn.Text = "Hold: " .. Steal.holdSeconds .. "s  ▼"
-end)
--- ល្បឿនពេលដឹកស៊ុតទៅផ្ទះ (ទាប = server ទទួលងាយជាង)
-local csp = {100, 150, 200, 300, 600}
-local ci = 4
-local carryBtn = Instance.new("TextButton")
-carryBtn.Size = UDim2.new(1, 0, 0, 34)
-carryBtn.BackgroundColor3 = Color3.fromRGB(70, 60, 140)
-carryBtn.Text = "Carry Speed: 300  ▼"
-carryBtn.TextColor3 = Color3.new(1, 1, 1)
-carryBtn.Font = Enum.Font.GothamBold
-carryBtn.TextSize = 14
-carryBtn.Parent = content
-Instance.new("UICorner", carryBtn)
-carryBtn.MouseButton1Click:Connect(function()
-	ci = ci % #csp + 1
-	Steal.carrySpeed = csp[ci]
-	carryBtn.Text = "Carry Speed: " .. Steal.carrySpeed .. "  ▼"
-end)
-addToggle("Anti Guard", Anti.set)
-addToggle("Chase Secret/Eternal/Divine", function(on) Steal.chaseVip = on end, true)
-addToggle("Avoid Guards", function(on) Steal.avoidGuards = on end, true)
-addToggle("Fly", Fly.set)
 
--- ល្បឿន Fly + ប៊ូតុង ▲ ▼ (សម្រាប់ទូរស័ព្ទ)
-local row = Instance.new("Frame")
-row.Size = UDim2.new(1, 0, 0, 34)
-row.BackgroundTransparency = 1
-row.Parent = content
-
-local function rowBtn(text, xScale, wScale, color)
-	local b = Instance.new("TextButton")
-	b.Size = UDim2.new(wScale, -4, 1, 0)
-	b.Position = UDim2.new(xScale, 2, 0, 0)
-	b.BackgroundColor3 = color
-	b.Text = text
-	b.TextColor3 = Color3.new(1, 1, 1)
-	b.Font = Enum.Font.GothamBold
-	b.TextSize = 14
-	b.Parent = row
-	Instance.new("UICorner", b)
-	return b
+-- MOD
+local mods = makeSection(stealPage, "MOD", 2, false)
+local modButtons = {}
+local function renderMods()
+	for name, m in pairs(modButtons) do
+		local on = name == Steal.mode
+		tween(m.btn, 0.12, {BackgroundColor3 = on and Color3.fromRGB(48, 52, 96) or PANEL2})
+		m.stroke.Color = on and ACCENT or PANEL2
+		m.dot.BackgroundColor3 = on and ACCENT or STROKE
+	end
 end
-
-local speedBtn = rowBtn("Speed: " .. Fly.speed, 0, 0.5, Color3.fromRGB(50, 50, 58))
-local speeds = {30, 60, 100, 150, 250}
-local si = 2
-speedBtn.MouseButton1Click:Connect(function()
-	si = si % #speeds + 1
-	Fly.speed = speeds[si]
-	speedBtn.Text = "Speed: " .. Fly.speed
-end)
-
-local upBtn = rowBtn("▲", 0.5, 0.25, Color3.fromRGB(60, 120, 255))
-local downBtn = rowBtn("▼", 0.75, 0.25, Color3.fromRGB(60, 120, 255))
-local function hold(btn, key)
-	btn.InputBegan:Connect(function(i)
-		if i.UserInputType == Enum.UserInputType.Touch or i.UserInputType == Enum.UserInputType.MouseButton1 then
-			Fly[key] = true
-		end
-	end)
-	btn.InputEnded:Connect(function(i)
-		if i.UserInputType == Enum.UserInputType.Touch or i.UserInputType == Enum.UserInputType.MouseButton1 then
-			Fly[key] = false
-		end
+for i, m in ipairs(MODES) do
+	local b = new("TextButton", {
+		Size = UDim2.new(1, 0, 0, 42), BackgroundColor3 = PANEL2, Text = "", AutoButtonColor = false, LayoutOrder = i,
+	}, mods)
+	corner(b, 8)
+	local st = stroke(b, PANEL2, 1.5)
+	local n = label(b, m.name, 13, TEXT, Enum.Font.GothamBold)
+	n.Size = UDim2.new(1, -40, 0, 18)
+	n.Position = UDim2.fromOffset(12, 5)
+	local d = label(b, m.desc, 11, MUTED)
+	d.Size = UDim2.new(1, -40, 0, 14)
+	d.Position = UDim2.fromOffset(12, 23)
+	local dot = new("Frame", {Size = UDim2.fromOffset(12, 12), Position = UDim2.new(1, -24, 0.5, -6), BackgroundColor3 = STROKE}, b)
+	corner(dot, 6)
+	modButtons[m.name] = {btn = b, stroke = st, dot = dot}
+	b.MouseButton1Click:Connect(function()
+		Steal.mode = m.name
+		renderMods()
 	end)
 end
-hold(upBtn, "up")
-hold(downBtn, "down")
+renderMods()
+for _, name in ipairs(RARITIES) do renderChip(name) end
 
--- Rarity filter (មិនជ្រើស = យកគ្រប់ rarity)
-local rtitle = Instance.new("TextLabel")
-rtitle.Size = UDim2.new(1, 0, 0, 20)
-rtitle.BackgroundTransparency = 1
-rtitle.Text = "Rarity Filter (ទទេ = យកល្អបំផុតមុន)"
-rtitle.TextColor3 = Color3.fromRGB(200, 200, 210)
-rtitle.Font = Enum.Font.GothamBold
-rtitle.TextSize = 12
-rtitle.Parent = content
-
-local grid = Instance.new("Frame")
-grid.Size = UDim2.new(1, 0, 0, 0)
-grid.AutomaticSize = Enum.AutomaticSize.Y
-grid.BackgroundTransparency = 1
-grid.Parent = content
-local gl = Instance.new("UIGridLayout", grid)
-gl.CellSize = UDim2.new(0.5, -4, 0, 26)
-gl.CellPadding = UDim2.new(0, 6, 0, 4)
-
-for _, name in ipairs(RARITIES) do
-	local chip = Instance.new("TextButton")
-	chip.BackgroundColor3 = Color3.fromRGB(50, 50, 58)
-	chip.Text = name
-	chip.TextColor3 = Color3.new(1, 1, 1)
-	chip.Font = Enum.Font.Gotham
-	chip.TextSize = 12
-	chip.Parent = grid
-	Instance.new("UICorner", chip)
-	chip.MouseButton1Click:Connect(function()
-		local on = not Steal.rarities[name]
-		Steal.rarities[name] = on or nil
-		chip.BackgroundColor3 = on and Color3.fromRGB(40, 160, 90) or Color3.fromRGB(50, 50, 58)
-	end)
+-- Status tab
+local function infoRow(order, key)
+	local row = new("Frame", {Size = UDim2.new(1, 0, 0, 34), BackgroundColor3 = PANEL, LayoutOrder = order}, statusPage)
+	corner(row, 8)
+	local k = label(row, key, 12, MUTED)
+	k.Size = UDim2.new(0.4, 0, 1, 0)
+	k.Position = UDim2.fromOffset(12, 0)
+	local v = label(row, "-", 12, TEXT, Enum.Font.GothamMedium, Enum.TextXAlignment.Right)
+	v.Size = UDim2.new(0.6, -24, 1, 0)
+	v.Position = UDim2.new(0.4, 0, 0, 0)
+	v.TextTruncate = Enum.TextTruncate.AtEnd
+	return v
 end
+local vStatus = infoRow(1, "Status")
+local vTarget = infoRow(2, "Target rarity")
+local vGuard = infoRow(3, "Guard")
+local vCarry = infoRow(4, "Carrying egg")
+local vMode = infoRow(5, "MOD")
 
+-- Floating logo button
+local hasLogo = LOGO_ID ~= "" and not LOGO_ID:match("^rbxassetid://0?$")
+local fab = new("ImageButton", {
+	Size = UDim2.fromOffset(54, 54), Position = UDim2.new(0, 16, 0.5, -27),
+	BackgroundColor3 = PANEL, Image = hasLogo and LOGO_ID or "", ScaleType = Enum.ScaleType.Crop,
+	AutoButtonColor = false, ZIndex = 20,
+}, gui)
+corner(fab, 27)
+stroke(fab, ACCENT, 2)
+if not hasLogo then
+	local l = label(fab, TITLE:sub(1, 1), 24, ACCENT, Enum.Font.GothamBold, Enum.TextXAlignment.Center)
+	l.Size = UDim2.new(1, 0, 1, 0)
+	l.ZIndex = 21
+end
+local liveDot = new("Frame", {
+	Size = UDim2.fromOffset(12, 12), Position = UDim2.new(1, -14, 0, 2), BackgroundColor3 = GREEN, Visible = false, ZIndex = 22,
+}, fab)
+corner(liveDot, 6)
+stroke(liveDot, BG, 2)
+
+local opened = true
+local function setOpen(v)
+	opened = v
+	if v then
+		main.Visible = true
+		scale.Scale = 0.85
+		TweenService:Create(scale, TweenInfo.new(0.18, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Scale = 1}):Play()
+	else
+		tween(scale, 0.12, {Scale = 0.85})
+		task.delay(0.12, function()
+			if not opened then main.Visible = false end
+		end)
+	end
+end
+local fabMoved = makeDraggable(fab, fab)
+fab.MouseButton1Click:Connect(function()
+	if not fabMoved() then setOpen(not opened) end
+end)
+closeBtn.MouseButton1Click:Connect(function() setOpen(false) end)
+
+selectTab("Steal")
+
+-- Live update
 task.spawn(function()
 	while gui.Parent do
-		statusLabel.Text = "Status: " .. Steal.status
-		dropLabel.Text = "Last drop: " .. Diag.text
-		task.wait(0.3)
+		toggleSub.Text = Steal.status
+		vStatus.Text = Steal.status
+		vTarget.Text = Steal.target
+		vGuard.Text = Steal.guard
+		vCarry.Text = Steal.carrying and "Yes" or "No"
+		vMode.Text = Steal.mode
+		liveDot.Visible = Steal.enabled
+		task.wait(0.25)
 	end
 end)
