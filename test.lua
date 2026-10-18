@@ -28,7 +28,6 @@ local Remotes = require(RS.Shared.Remotes)
 local AreaEggs = require(RS.Shared.Types.AreaEggs)
 local Assets = require(RS.Data.Assets)
 local eggWorld = Remotes.EggWorld
-local okER, EggRecords = pcall(function() return require(RS.Shared.Util.EggRecords) end)
 
 ------------------------------------------------------------
 -- AUTO STEAL (Tween)
@@ -74,15 +73,6 @@ local function rarityRank(rec)
 	local name = rarityOf(rec)
 	for i, n in ipairs(RARITIES) do
 		if n == name then return i end
-	end
-	return 0
-end
-
--- ទម្ងន់ស៊ុត (kg) ដូច Sena: EggRecords.WeightKgForScale(AssetCategory, AssetScale)
-local function weightOf(rec)
-	if okER and EggRecords and type(EggRecords.WeightKgForScale) == "function" then
-		local ok, r = pcall(EggRecords.WeightKgForScale, rec.AssetCategory, tonumber(rec.AssetScale) or 1)
-		if ok and type(r) == "number" then return r end
 	end
 	return 0
 end
@@ -291,25 +281,20 @@ local function guardState()
 	return false, name
 end
 
--- ជ្រើសស៊ុត: rarity ខ្ពស់បំផុតមុន → បើ rarity ដូចគ្នា យកអា kg ច្រើនជាង → បើ kg ដូចគ្នា យកអាជិតជាង
+-- ជ្រើសស៊ុត: rarity ខ្ពស់បំផុតមុន បន្ទាប់មកជិតបំផុត
 local function pickTarget(skip)
 	local root = getRoot()
 	if not root then return nil end
-	local best, bestRank, bestW, bestDist
+	local best, bestRank, bestDist
 	for _, rec in ipairs(readRecords()) do
 		if (rec.State == AreaEggs.States.Slot or rec.State == AreaEggs.States.Dropped)
 		and passesFilter(rec) and (isVip(rec) or not skip[rec.Uid]) then
 			local pos = eggPos(rec)
 			if pos then
 				local rank = rarityRank(rec)
-				local w = weightOf(rec)
 				local d = (pos - root.Position).Magnitude
-				local better = not best
-					or rank > bestRank
-					or (rank == bestRank and w > bestW + 1e-6)
-					or (rank == bestRank and math.abs(w - bestW) <= 1e-6 and d < bestDist)
-				if better then
-					best, bestRank, bestW, bestDist = rec, rank, w, d
+				if not best or rank > bestRank or (rank == bestRank and d < bestDist) then
+					best, bestRank, bestDist = rec, rank, d
 				end
 			end
 		end
@@ -386,9 +371,8 @@ local function stealLoop(myToken)
 					task.wait(1)
 				else
 					local rname = rarityOf(target)
-					local wtxt = string.format("%s %.1fkg", rname, weightOf(target))
-					Steal.target = wtxt
-					Steal.status = "Going to " .. wtxt
+					Steal.target = rname
+					Steal.status = "Going to " .. rname
 					local pos = eggPos(target)
 					local arrived = pos and travel(pos + Vector3.new(0, 3, 0), function()
 						if stopped() then return true end
@@ -564,10 +548,10 @@ makeDraggable(header, main)
 -- Tab rail
 local body = new("Frame", {Size = UDim2.new(1, 0, 1, -40), Position = UDim2.fromOffset(0, 40), BackgroundTransparency = 1}, main)
 local rail = new("Frame", {Size = UDim2.new(0, 122, 1, 0), BackgroundTransparency = 1, BorderSizePixel = 0}, body)
+new("Frame", {Size = UDim2.new(0, 1, 1, 0), Position = UDim2.new(1, -1, 0, 0), BackgroundColor3 = STROKE, BorderSizePixel = 0}, rail)
 pad(rail, 8, 10, 8, 8)
 new("UIListLayout", {Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder}, rail)
 
-new("Frame", {Size = UDim2.new(0, 1, 1, 0), Position = UDim2.fromOffset(121, 0), BackgroundColor3 = STROKE, BorderSizePixel = 0}, body)
 local pagesHolder = new("Frame", {Size = UDim2.new(1, -122, 1, 0), Position = UDim2.fromOffset(122, 0), BackgroundTransparency = 1}, body)
 
 local tabs = {}
@@ -670,7 +654,7 @@ end)
 -- Filters / Rarity
 local filters = makeSection(stealPage, "Filters / Rarity", 1, false)
 local hintRow = new("Frame", {Size = UDim2.new(1, 0, 0, 22), BackgroundTransparency = 1, LayoutOrder = 1}, filters)
-local hint = label(hintRow, "Highest rarity first, then heaviest kg", 11, MUTED)
+local hint = label(hintRow, "None selected = best rarity first", 11, MUTED)
 hint.Size = UDim2.new(1, -60, 1, 0)
 local clearBtn = new("TextButton", {
 	Size = UDim2.fromOffset(52, 22), Position = UDim2.new(1, -52, 0, 0), BackgroundColor3 = PANEL2,
