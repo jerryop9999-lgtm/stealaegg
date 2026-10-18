@@ -27,7 +27,7 @@ local function fn2()
 	return genv.__SenaV4HubSession == senaV4HubSession
 end
 
--- ប្រព័ន្ធសុវត្ថិភាព និង Anti-Tamper[span_1](start_span)[span_1](end_span)
+-- ប្រព័ន្ធសុវត្ថិភាព និង Anti-Tamper[span_0](start_span)[span_0](end_span)
 do
 	local tbl2 = {"hookfunction", "hookmetamethod", "getconnections", "getgc", "getrawmetatable", "firetouchinterest", "newcclosure", "getnamecallmethod", "checkcaller", "getcallingscript"}
 	local iscclosure = genv.iscclosure or rawget(_G, "iscclosure")
@@ -186,7 +186,7 @@ genv.__SenaV4NetPing = function()
 	return tonumber(n2) or 0
 end
 
--- Hover Pad System & Sena Integrity Core[span_2](start_span)[span_2](end_span)
+-- Hover Pad System & Sena Integrity Core[span_1](start_span)[span_1](end_span)
 local n2, n3, name, str, v3 = 8, 1, "__SenaV4HoverPad", "SenaV4RuntimeOwner"
 local str2 = tostring(math.random(100000, 999999))
 local connection, connection2
@@ -663,7 +663,7 @@ genv.__SenaV4TweenRuntimeCleanup = function()
 	fn27()
 end
 
--- Guard Presentation / Bypass[span_3](start_span)[span_3](end_span)
+-- Guard Presentation / Bypass[span_2](start_span)[span_2](end_span)
 pcall(function()
 	local GuardPresentationComponent = require(ReplicatedStorage.Shared.Modules.GuardAreas.GuardPresentationComponent)
 	if type(GuardPresentationComponent) == "table" then
@@ -677,7 +677,7 @@ pcall(function()
 end)
 
 ------------------------------------------------------------
--- OLIVER | Steal an Egg UI & Anti-Speed Logic Integration[span_4](start_span)[span_4](end_span)
+-- OLIVER | Steal an Egg UI & Anti-Speed Logic Integration[span_3](start_span)[span_3](end_span)
 ------------------------------------------------------------
 local TITLE = "OLIVER."
 local VERSION = "V3"
@@ -719,7 +719,7 @@ local Steal = {
 	mode = "High Speed User Normal",
 	rarities = {},
 	holdSeconds = 5,
-	speed = 350, -- កែសម្រួលល្បឿនលំនាំដើមឱ្យមានស្ថេរភាពជាមួយ Server
+	speed = 350,
 	vip = {Secret = true, Eternal = true, Divine = true},
 }
 local token = 0
@@ -1017,7 +1017,6 @@ local function stealLoop(myToken)
 					end)
 
 					if arrived and not stopped() then
-						-- 💡 កែតម្រូវ៖ ទម្លាក់តួអង្គឱ្យមកជិតដី/ស៊ុត និងផ្អាក 0.3s ឱ្យ Server Sync ទីតាំងមុននឹងលួច
 						local rt = getRoot()
 						if rt then
 							rt.CFrame = CFrame.new(pos + Vector3.new(0, 1.5, 0))
@@ -1083,7 +1082,7 @@ function Steal.set(on)
 end
 
 ------------------------------------------------------------
--- UI SETUP (Oliver Interface)[span_5](start_span)[span_5](end_span)
+-- UI SETUP (Oliver Interface)[span_4](start_span)[span_4](end_span)
 ------------------------------------------------------------
 local BG = Color3.fromRGB(16, 17, 24)
 local BG2 = Color3.fromRGB(22, 23, 32)
