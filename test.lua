@@ -28,6 +28,7 @@ local Remotes = require(RS.Shared.Remotes)
 local AreaEggs = require(RS.Shared.Types.AreaEggs)
 local Assets = require(RS.Data.Assets)
 local eggWorld = Remotes.EggWorld
+local okER, EggRecords = pcall(function() return require(RS.Shared.Util.EggRecords) end)
 
 ------------------------------------------------------------
 -- AUTO STEAL (Tween)
@@ -53,7 +54,6 @@ local Steal = {
 	enabled = false,
 	status = "Idle",
 	target = "-",
-	guard = "Sleeping",
 	carrying = false,
 	mode = "High Speed User Normal",
 	rarities = {},      -- ទទេ = យកទាំងអស់ (ល្អបំផុតមុន)
@@ -73,6 +73,15 @@ local function rarityRank(rec)
 	local name = rarityOf(rec)
 	for i, n in ipairs(RARITIES) do
 		if n == name then return i end
+	end
+	return 0
+end
+
+-- ទម្ងន់ស៊ុត (kg) ដូច Sena: EggRecords.WeightKgForScale(AssetCategory, AssetScale)
+local function weightOf(rec)
+	if okER and EggRecords and type(EggRecords.WeightKgForScale) == "function" then
+		local ok, r = pcall(EggRecords.WeightKgForScale, rec.AssetCategory, tonumber(rec.AssetScale) or 1)
+		if ok and type(r) == "number" then return r end
 	end
 	return 0
 end
@@ -108,7 +117,7 @@ local function inSafe(root)
 end
 
 -- ការពារតួពេលផ្លាស់ទីលឿន (ដូច Sena): ជើងទ្រ hover pad មើលមិនឃើញ + KillPartIgnore + AutoRotate បិទ
-local Protect = {pad = nil, conn = nil, autoRotate = nil}
+local Protect = {pad = nil, conn = nil, hb = nil, autoRotate = nil}
 
 local function ensureProtect()
 	local root, hum = getRoot()
@@ -133,6 +142,27 @@ local function ensureProtect()
 		part.Parent = workspace
 		Protect.pad = part
 	end
+	if not Protect.hb then
+		-- ដូច Sena (health pinner): កុំឱ្យតួងាប់ពេលផ្លាស់ទីលឿន (ក ដាច់ / ធ្លាក់ / ragdoll)
+		local function pin()
+			local r, h = getRoot()
+			if not r or not h then return end
+			pcall(function()
+				h.BreakJointsOnDeath = false
+				h.RequiresNeck = false
+				h:SetStateEnabled(Enum.HumanoidStateType.Dead, false)
+				h:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
+				h:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
+				if h.Health <= 0 then h.Health = math.max(h.MaxHealth, 100) end
+				if h:GetState() == Enum.HumanoidStateType.Dead then
+					h:ChangeState(Enum.HumanoidStateType.Running)
+				end
+				if r.Anchored then r.Anchored = false end
+			end)
+		end
+		pin()
+		Protect.hb = RunService.Heartbeat:Connect(pin)
+	end
 	if not Protect.conn then
 		Protect.conn = RunService.PreSimulation:Connect(function()
 			local r, h = getRoot()
@@ -147,9 +177,19 @@ end
 
 local function stopProtect()
 	if Protect.conn then Protect.conn:Disconnect() Protect.conn = nil end
+	if Protect.hb then Protect.hb:Disconnect() Protect.hb = nil end
 	if Protect.pad then Protect.pad:Destroy() Protect.pad = nil end
 	local root, hum = getRoot()
 	if root then root:SetAttribute("KillPartIgnore", nil) end
+	if hum then
+		pcall(function()
+			hum.BreakJointsOnDeath = true
+			hum.RequiresNeck = true
+			hum:SetStateEnabled(Enum.HumanoidStateType.Dead, true)
+			hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, true)
+			hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, true)
+		end)
+	end
 	if hum and Protect.autoRotate ~= nil then hum.AutoRotate = Protect.autoRotate end
 	Protect.autoRotate = nil
 end
@@ -260,41 +300,25 @@ local function eggPos(rec)
 	return cf and cf.Position
 end
 
--- ស្ថានភាព guard (attribute GuardState: Sleeping / Waking / Chasing)
-local guardAreasFolder
-local function guardState()
-	if not (guardAreasFolder and guardAreasFolder.Parent) then
-		guardAreasFolder = nil
-		for _, d in ipairs(workspace:GetDescendants()) do
-			if d.Name == "GuardAreas" then guardAreasFolder = d break end
-		end
-	end
-	local name = "Sleeping"
-	if guardAreasFolder then
-		for _, area in ipairs(guardAreasFolder:GetChildren()) do
-			local g = area:FindFirstChild("Guard")
-			local st = g and g:GetAttribute("GuardState")
-			if st == "Waking" or st == "Chasing" then return true, st end
-			if st then name = st end
-		end
-	end
-	return false, name
-end
-
--- ជ្រើសស៊ុត: rarity ខ្ពស់បំផុតមុន បន្ទាប់មកជិតបំផុត
+-- ជ្រើសស៊ុត: rarity ខ្ពស់បំផុតមុន → បើ rarity ដូចគ្នា យកអា kg ច្រើនជាង → បើ kg ដូចគ្នា យកអាជិតជាង
 local function pickTarget(skip)
 	local root = getRoot()
 	if not root then return nil end
-	local best, bestRank, bestDist
+	local best, bestRank, bestW, bestDist
 	for _, rec in ipairs(readRecords()) do
 		if (rec.State == AreaEggs.States.Slot or rec.State == AreaEggs.States.Dropped)
 		and passesFilter(rec) and (isVip(rec) or not skip[rec.Uid]) then
 			local pos = eggPos(rec)
 			if pos then
 				local rank = rarityRank(rec)
+				local w = weightOf(rec)
 				local d = (pos - root.Position).Magnitude
-				if not best or rank > bestRank or (rank == bestRank and d < bestDist) then
-					best, bestRank, bestDist = rec, rank, d
+				local better = not best
+					or rank > bestRank
+					or (rank == bestRank and w > bestW + 1e-6)
+					or (rank == bestRank and math.abs(w - bestW) <= 1e-6 and d < bestDist)
+				if better then
+					best, bestRank, bestW, bestDist = rec, rank, w, d
 				end
 			end
 		end
@@ -304,7 +328,6 @@ end
 
 local function stealLoop(myToken)
 	local lastUid
-	local calmSince
 	local skip = {}
 	local function stopped() return not Steal.enabled or token ~= myToken end
 
@@ -316,9 +339,7 @@ local function stealLoop(myToken)
 		else
 			ensureProtect()
 			local carried = myCarriedEgg()
-			local awake, gst = guardState()
 			Steal.carrying = carried ~= nil
-			Steal.guard = gst
 
 			if carried then
 				-- ដឹកទៅ safe area ហើយឈរចាំ server ទទួលស៊ុត
@@ -335,21 +356,6 @@ local function stealLoop(myToken)
 			elseif wallSealed() then
 				Steal.status = "Egg reset - waiting"
 				task.wait(0.5)
-			elseif awake then
-				-- guard ភ្ញាក់ → ត្រឡប់ទៅ safe area រង់ចាំវាដេកវិញ
-				calmSince = nil
-				Steal.status = "Guard " .. gst .. " - waiting"
-				if not inSafe(root) then
-					travel(safeTarget(), stopped)
-				else
-					task.wait(0.3)
-				end
-			elseif (function()
-				calmSince = calmSince or os.clock()
-				return os.clock() - calmSince < 2
-			end)() then
-				Steal.status = "Guard asleep - settling"
-				task.wait(0.2)
 			else
 				local target
 				-- ស៊ុតទើបធ្លាក់ ត្រូវរើសវិញមុនគេ
@@ -371,12 +377,12 @@ local function stealLoop(myToken)
 					task.wait(1)
 				else
 					local rname = rarityOf(target)
-					Steal.target = rname
-					Steal.status = "Going to " .. rname
+					local wtxt = string.format("%s %.1fkg", rname, weightOf(target))
+					Steal.target = wtxt
+					Steal.status = "Going to " .. wtxt
 					local pos = eggPos(target)
 					local arrived = pos and travel(pos + Vector3.new(0, 3, 0), function()
 						if stopped() then return true end
-						if select(1, guardState()) then return true end
 						local r = findByUid(target.Uid)
 						return not r or (r.State ~= AreaEggs.States.Slot and r.State ~= AreaEggs.States.Dropped)
 					end)
@@ -389,8 +395,7 @@ local function stealLoop(myToken)
 						while os.clock() < holdUntil and not stopped() do
 							Steal.status = string.format("Securing %s (%.1fs)", rname, holdUntil - os.clock())
 							local r = findByUid(target.Uid)
-							if select(1, guardState())
-							or not r or (r.State ~= AreaEggs.States.Slot and r.State ~= AreaEggs.States.Dropped) then
+							if not r or (r.State ~= AreaEggs.States.Slot and r.State ~= AreaEggs.States.Dropped) then
 								lost = true
 								break
 							end
@@ -548,10 +553,10 @@ makeDraggable(header, main)
 -- Tab rail
 local body = new("Frame", {Size = UDim2.new(1, 0, 1, -40), Position = UDim2.fromOffset(0, 40), BackgroundTransparency = 1}, main)
 local rail = new("Frame", {Size = UDim2.new(0, 122, 1, 0), BackgroundTransparency = 1, BorderSizePixel = 0}, body)
-new("Frame", {Size = UDim2.new(0, 1, 1, 0), Position = UDim2.new(1, -1, 0, 0), BackgroundColor3 = STROKE, BorderSizePixel = 0}, rail)
 pad(rail, 8, 10, 8, 8)
 new("UIListLayout", {Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder}, rail)
 
+new("Frame", {Size = UDim2.new(0, 1, 1, 0), Position = UDim2.fromOffset(121, 0), BackgroundColor3 = STROKE, BorderSizePixel = 0}, body)
 local pagesHolder = new("Frame", {Size = UDim2.new(1, -122, 1, 0), Position = UDim2.fromOffset(122, 0), BackgroundTransparency = 1}, body)
 
 local tabs = {}
@@ -654,7 +659,7 @@ end)
 -- Filters / Rarity
 local filters = makeSection(stealPage, "Filters / Rarity", 1, false)
 local hintRow = new("Frame", {Size = UDim2.new(1, 0, 0, 22), BackgroundTransparency = 1, LayoutOrder = 1}, filters)
-local hint = label(hintRow, "None selected = best rarity first", 11, MUTED)
+local hint = label(hintRow, "Highest rarity first, then heaviest kg", 11, MUTED)
 hint.Size = UDim2.new(1, -60, 1, 0)
 local clearBtn = new("TextButton", {
 	Size = UDim2.fromOffset(52, 22), Position = UDim2.new(1, -52, 0, 0), BackgroundColor3 = PANEL2,
@@ -874,7 +879,7 @@ selectTab("Main")
 -- Live update
 task.spawn(function()
 	while gui.Parent do
-		toggleSub.Text = Steal.status .. "  ·  Guard: " .. Steal.guard
+		toggleSub.Text = Steal.status
 		liveDot.Visible = Steal.enabled
 		task.wait(0.25)
 	end
