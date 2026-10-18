@@ -978,7 +978,7 @@ local function stealLoop(myToken)
 				if not inSafe(root) then
 					-- 🚀 កំណត់ល្បឿនមក Base វិញ ឱ្យលឿនបំផុត 1000
 					local oldSpeed = Steal.speed
-					Steal.speed = 1000 
+					Steal.speed = 600 
 					travel(SAFE_POS + Vector3.new(0, 2, 0), function() return stopped() or not myCarriedEgg() end)
 					Steal.speed = oldSpeed
 				else
@@ -1417,8 +1417,8 @@ end
 local function cfgReset()
 	Steal.mode = "High Speed Fly Mod"
 	Steal.rarities = {}
-	Steal.holdSeconds = 5
-	Steal.speed = 350
+	Steal.holdSeconds = 0
+	Steal.speed = 300
 	refreshAll()
 end
 
