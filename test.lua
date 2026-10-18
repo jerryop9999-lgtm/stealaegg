@@ -15,7 +15,7 @@ local player = Players.LocalPlayer
 ------------------------------------------------------------
 local TITLE = "OLIVER."
 local VERSION = "V3"
-local LOGO_ID = "rbxassetid://77896693340732" -- ← ដាក់ Logo ID របស់អ្នកនៅទីนี่
+local LOGO_ID = "rbxassetid://77896693340732" -- ← ដាក់ Logo ID របស់អ្នកនៅទីនេះ
 local ACCENT = Color3.fromRGB(110, 120, 255)
 
 local SAFE_POS = Vector3.new(542.93, 71.5, -405.58) -- safe area (ផ្ទះ)
