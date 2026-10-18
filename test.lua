@@ -115,6 +115,53 @@ local function inSafe(root)
 	return Vector2.new(d.X, d.Z).Magnitude <= SAFE_RADIUS and math.abs(d.Y) <= 18
 end
 
+-- ការពារតួពេលផ្លាស់ទីលឿន (ដូច Sena): ជើងទ្រ hover pad មើលមិនឃើញ + KillPartIgnore + AutoRotate បិទ
+local Protect = {pad = nil, conn = nil, autoRotate = nil}
+
+local function ensureProtect()
+	local root, hum = getRoot()
+	if not root or not hum then return end
+	if root:GetAttribute("KillPartIgnore") ~= true then
+		root:SetAttribute("KillPartIgnore", true)
+	end
+	if Protect.autoRotate == nil then
+		Protect.autoRotate = hum.AutoRotate
+		hum.AutoRotate = false
+	end
+	if not (Protect.pad and Protect.pad.Parent) then
+		local part = Instance.new("Part")
+		part.Name = "OliverHoverPad"
+		part.Anchored = true
+		part.CanCollide = true
+		part.CanQuery = false -- កុំឱ្យ raycast របស់ safeTarget ប៉ះ
+		part.CanTouch = false
+		part.CastShadow = false
+		part.Transparency = 1
+		part.Size = Vector3.new(8, 1, 8)
+		part.Parent = workspace
+		Protect.pad = part
+	end
+	if not Protect.conn then
+		Protect.conn = RunService.PreSimulation:Connect(function()
+			local r, h = getRoot()
+			if r and h and Protect.pad and Protect.pad.Parent then
+				local p = r.Position
+				local feet = h.HipHeight + r.Size.Y / 2
+				Protect.pad.CFrame = CFrame.new(p.X, p.Y - feet - 0.55, p.Z)
+			end
+		end)
+	end
+end
+
+local function stopProtect()
+	if Protect.conn then Protect.conn:Disconnect() Protect.conn = nil end
+	if Protect.pad then Protect.pad:Destroy() Protect.pad = nil end
+	local root, hum = getRoot()
+	if root then root:SetAttribute("KillPartIgnore", nil) end
+	if hum and Protect.autoRotate ~= nil then hum.AutoRotate = Protect.autoRotate end
+	Protect.autoRotate = nil
+end
+
 -- Tween ទៅទីតាំង (TweenService) - អាចបញ្ឈប់ពាក់កណ្តាលផ្លូវបានតាម abort()
 local function tweenTo(pos, abort)
 	local root = getRoot()
@@ -260,6 +307,7 @@ local function stealLoop(myToken)
 			Steal.status = "Waiting for character"
 			task.wait(1)
 		else
+			ensureProtect()
 			local carried = myCarriedEgg()
 			local awake, gst = guardState()
 			Steal.carrying = carried ~= nil
@@ -371,6 +419,7 @@ local function stealLoop(myToken)
 		end
 		task.wait()
 	end
+	if token == myToken or not Steal.enabled then stopProtect() end
 	Steal.status = "Idle"
 	Steal.target = "-"
 	Steal.carrying = false
@@ -530,7 +579,7 @@ local function addTab(name, glyph, order)
 	return page
 end
 
-local stealPage = addTab("Steal", "◆", 1)
+local stealPage = addTab("Main", "◆", 1)
 local statusPage = addTab("Status", "●", 2)
 
 -- Collapsible card (↑ = ปิด / ↓ = เปิด)
@@ -727,7 +776,7 @@ fab.MouseButton1Click:Connect(function()
 end)
 closeBtn.MouseButton1Click:Connect(function() setOpen(false) end)
 
-selectTab("Steal")
+selectTab("Main")
 
 -- Live update
 task.spawn(function()
