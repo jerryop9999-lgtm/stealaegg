@@ -186,7 +186,7 @@ genv.__SenaV4NetPing = function()
 	return tonumber(n2) or 0
 end
 
--- Hover Pad System (Fly Mod) & Sena Integrity Core[span_1](start_span)[span_1](end_span)
+-- Hover Pad System (Fly Mod) & Sena Integrity Core
 local n2, n3, name, str, v3 = 8, 1, "__SenaV4HoverPad", "SenaV4RuntimeOwner"
 local str2 = tostring(math.random(100000, 999999))
 local connection, connection2
@@ -663,7 +663,7 @@ genv.__SenaV4TweenRuntimeCleanup = function()
 	fn27()
 end
 
--- Guard Presentation / Bypass[span_2](start_span)[span_2](end_span)
+-- Guard Presentation / Bypass
 pcall(function()
 	local GuardPresentationComponent = require(ReplicatedStorage.Shared.Modules.GuardAreas.GuardPresentationComponent)
 	if type(GuardPresentationComponent) == "table" then
@@ -709,9 +709,7 @@ local RARITY_COLORS = {
 }
 local MODES = {
 	{name = "High Speed Fly Mod", desc = "Sena Fly + Integrity Spoof + Delivery Speed 1000"},
-	{name = "Fly Mod (HoverPad)", desc = "ហោះហើរលើខ្យល់ដោយសុវត្ថិភាព មិនធ្លាក់ចូលឡាវ៉ា"}, -- ម៉ូដថ្មីដែលបានបន្ថែម
 }
-
 
 local Steal = {
 	enabled = false,
@@ -721,7 +719,7 @@ local Steal = {
 	mode = "High Speed Fly Mod",
 	rarities = {},
 	holdSeconds = 5,
-	speed = 350, -- ល្បឿនពេលទៅយក Egg (តាមការកំណត់ក្នុង UI/Game)
+	speed = 350, -- ល្បឿនពេលទៅយក Egg (តាមการកំណត់ក្នុង UI/Game)
 	vip = {Secret = true, Eternal = true, Divine = true},
 }
 local token = 0
@@ -788,7 +786,7 @@ local function ensureProtect()
 		part.CanTouch = false
 		part.CastShadow = false
 		part.Transparency = 1
-		part.Size = Vector3.new(8, 1, 8)
+		part.Size = Vector3.new(8, 2, 8) -- បង្កើនទំហំកម្ពស់ Fly Pad ឱ្យផុតពីដី
 		part.Parent = workspace
 		Protect.pad = part
 	end
@@ -1331,7 +1329,7 @@ clearBtn.MouseButton1Click:Connect(function()
 	for _, name in ipairs(RARITIES) do renderChip(name) end
 end)
 
-local mods = makeSection(stealPage, "MOD", 2, true)
+local mods = makeSection(stealPage, "MOD", 2, false)
 local modButtons = {}
 local function renderMods()
 	for name, m in pairs(modButtons) do
