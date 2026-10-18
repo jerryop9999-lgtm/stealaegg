@@ -1,4 +1,4 @@
--- [[ SenaV4 Hub & OLIVER Auto Steal - Final Anti-Speed & Takeoff Integrated Script ]] --
+-- [[ SenaV4 Hub & OLIVER Auto Steal - Fixed Anti-Desync & Server Accept Script ]] --
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ProximityPromptService = game:GetService("ProximityPromptService")
@@ -27,7 +27,7 @@ local function fn2()
 	return genv.__SenaV4HubSession == senaV4HubSession
 end
 
--- ទី១៖ ប្រព័ន្ធសុវត្ថិភាព និង Anti-Tamper[span_2](start_span)[span_2](end_span)
+-- ប្រព័ន្ធសុវត្ថិភាព និង Anti-Tamper[span_1](start_span)[span_1](end_span)
 do
 	local tbl2 = {"hookfunction", "hookmetamethod", "getconnections", "getgc", "getrawmetatable", "firetouchinterest", "newcclosure", "getnamecallmethod", "checkcaller", "getcallingscript"}
 	local iscclosure = genv.iscclosure or rawget(_G, "iscclosure")
@@ -138,20 +138,6 @@ if type(senaV4IdentitySetter) == "function" then
 	genv.__SenaV4UICapabilityIdentity = 8
 end
 
-if not rawget(_G, "setfpscap") and not rawget(_G, "set_fps_cap") then
-	senaV4IdentitySetter = type(setfpscap) == "function"
-end
-
-genv.__SenaV4SetCapFps = function(arg)
-	local n = tonumber(arg) or 240
-	local n2 = math.clamp(math.floor(n), 1, 1000)
-	local flag = rawget(_G, "setfpscap") or rawget(_G, "set_fps_cap") or type(setfpscap) == "function" and setfpscap
-	if type(flag) == "function" then
-		return pcall(flag, n2)
-	end
-	return false
-end
-
 if type(genv.__SenaV4TweenRuntimeCleanup) == "function" then
 	pcall(genv.__SenaV4TweenRuntimeCleanup)
 end
@@ -165,7 +151,7 @@ if type(genv.__SenaV4AntiGuardCleanup) == "function" then
 end
 
 genv.__SenaV4TweenRuntimeGeneration = (genv.__SenaV4TweenRuntimeGeneration or 0) + 1
-local tbl2 = {genv.__SenaV4TweenRuntimeGeneration, {KEY = "__SenaV4StealAnEggMovementSpoof", VERSION = 436, INTEGRITY_KEY = "__SenaV4StealAnEggIntegritySpoof", SIGNAL = "ClientCharacter: GetDebugSnapshot", HEADROOM = 1.35, CLAMP = 0.15, PADDING = 24, MULTIPLIER = 10, MIN_INPUT = 20, MAX_INPUT = 100, DEF_INPUT = 60, MIN_SPEED = 200, MAX_SPEED = 1000, DEF_SPEED = 600, FIELDS = {"LastObservedSample", "LastSample", "LastGoodSample", "LastGameplayTrustedSample", "LastValidatedSample", "LastValidatedGroundedSample", "LastConfirmedGroundSample", "CandidateGroundedSample"}}}
+local tbl2 = {genv.__SenaV4TweenRuntimeGeneration, {KEY = "__SenaV4StealAnEggMovementSpoof", VERSION = 436, INTEGRITY_KEY = "__SenaV4StealAnEggIntegritySpoof", SIGNAL = "ClientCharacter: GetDebugSnapshot", HEADROOM = 1.35, CLAMP = 0.15, PADDING = 24, MULTIPLIER = 10, MIN_INPUT = 20, MAX_INPUT = 100, DEF_INPUT = 60, MIN_SPEED = 200, MAX_SPEED = 1000, DEF_SPEED = 350, FIELDS = {"LastObservedSample", "LastSample", "LastGoodSample", "LastGameplayTrustedSample", "LastValidatedSample", "LastValidatedGroundedSample", "LastConfirmedGroundSample", "CandidateGroundedSample"}}}
 tbl2.n = 2
 local v2
 _, v2 = tbl2[1], tbl2[2]
@@ -200,7 +186,7 @@ genv.__SenaV4NetPing = function()
 	return tonumber(n2) or 0
 end
 
--- ទី២៖ Hover Pad System និង Sena Integrity Core[span_3](start_span)[span_3](end_span)
+-- Hover Pad System & Sena Integrity Core[span_2](start_span)[span_2](end_span)
 local n2, n3, name, str, v3 = 8, 1, "__SenaV4HoverPad", "SenaV4RuntimeOwner"
 local str2 = tostring(math.random(100000, 999999))
 local connection, connection2
@@ -254,7 +240,6 @@ local function fn7()
 		part.CanTouch = false
 		part.CastShadow = false
 		part.Transparency = 1
-		part.Material = Enum.Material.SmoothPlastic
 		part.Size = Vector3.new(n2, n3, n2)
 		v3 = part
 		part.Parent = Workspace
@@ -655,7 +640,7 @@ local function fn26()
 		local humanoid = character and character:FindFirstChildOfClass("Humanoid")
 		if not character or not humanoidRootPart or not humanoid then return end
 
-		local speedInput = 600
+		local speedInput = 350
 		fn15(character, speedInput * headroom)
 		if not fn24(humanoid, humanoidRootPart, speedInput) then
 			fn23(humanoid, humanoidRootPart, speedInput)
@@ -678,7 +663,7 @@ genv.__SenaV4TweenRuntimeCleanup = function()
 	fn27()
 end
 
--- Guard Presentation / Bypass[span_4](start_span)[span_4](end_span)
+-- Guard Presentation / Bypass[span_3](start_span)[span_3](end_span)
 pcall(function()
 	local GuardPresentationComponent = require(ReplicatedStorage.Shared.Modules.GuardAreas.GuardPresentationComponent)
 	if type(GuardPresentationComponent) == "table" then
@@ -692,7 +677,7 @@ pcall(function()
 end)
 
 ------------------------------------------------------------
--- OLIVER | Steal an Egg UI & Anti-Speed Logic Integration[span_5](start_span)[span_5](end_span)
+-- OLIVER | Steal an Egg UI & Anti-Speed Logic Integration[span_4](start_span)[span_4](end_span)
 ------------------------------------------------------------
 local TITLE = "OLIVER."
 local VERSION = "V3"
@@ -734,7 +719,7 @@ local Steal = {
 	mode = "High Speed User Normal",
 	rarities = {},
 	holdSeconds = 5,
-	speed = 600,
+	speed = 350, -- កែសម្រួលល្បឿនលំនាំដើមឱ្យមានស្ថេរភាពជាមួយ Server
 	vip = {Secret = true, Eternal = true, Divine = true},
 }
 local token = 0
@@ -858,35 +843,14 @@ end
 
 local MIN_SPEED, MAX_SPEED = 200, 1000
 
-local function feetOffset(root, hum)
-	if hum.RigType == Enum.HumanoidRigType.R15 then
-		return root.Size.Y * 0.5 + math.max(hum.HipHeight, 0.5)
-	end
-	return root.Size.Y * 0.5 + 2
-end
-
-local function groundYAt(x, z, char)
-	local root = char and char:FindFirstChild("HumanoidRootPart")
-	local origin = Vector3.new(x, (root and root.Position.Y or SAFE_POS.Y) + 60, z)
-	local params = RaycastParams.new()
-	params.FilterType = Enum.RaycastFilterType.Exclude
-	params.FilterDescendantsInstances = {char}
-	params.IgnoreWater = true
-	local hit = workspace:Raycast(origin, Vector3.new(0, -300, 0), params)
-	return hit and hit.Position.Y
-end
-
--- មុខងារ Travel ថ្មី៖ មានប្រព័ន្ធ Takeoff ងើបផុតกำแพง និងភ្ជាប់ Sena Integrity Spoofing (`fn23`, `fn24`)[span_6](start_span)[span_6](end_span)[span_7](start_span)[span_7](end_span)
 local function travel(pos, abort)
 	local speed = math.clamp(Steal.speed, MIN_SPEED, MAX_SPEED)
 	local root, hum = getRoot()
 	if not root or not hum then return false end
 	
-	-- 1. បើកដំណើរការ និង Initialize State របស់ Sena មុនពេលរត់
 	fn26()
 	fn23(hum, root, speed)
 	
-	-- 2. ยกตัวขึ้น (Takeoff) 10 หน่วยเพื่อไม่ให้ชนขอบประตูหรือกำแพง
 	local takeoffPos = Vector3.new(pos.X, math.max(pos.Y, root.Position.Y + 10), pos.Z)
 	
 	local slowUntil, lastMag, arrivedAt = 0, nil, nil
@@ -919,7 +883,6 @@ local function travel(pos, abort)
 			root.CFrame = CFrame.lookAt(takeoffPos, takeoffPos + face)
 			root.AssemblyLinearVelocity = Vector3.zero
 			
-			-- បញ្ជូន Velocity ស្ងប់ស្ងាត់ពេលដល់គោលដៅ[span_8](start_span)[span_8](end_span)
 			fn24(hum, root, speed, Vector3.new(0, 0, 0))
 			
 			arrivedAt = arrivedAt or os.clock()
@@ -932,7 +895,6 @@ local function travel(pos, abort)
 			root.CFrame = CFrame.lookAt(nextPos, nextPos + face)
 			root.AssemblyLinearVelocity = Vector3.zero
 			
-			-- អាប់ដេត Velocity Spoof តាមរាល់ Frame ដើម្បីបន្លំ Anti-Cheat[span_9](start_span)[span_9](end_span)
 			fn24(hum, root, speed, travelVel)
 		end
 	end
@@ -1055,7 +1017,15 @@ local function stealLoop(myToken)
 					end)
 
 					if arrived and not stopped() then
-						local holdPos = pos + Vector3.new(0, 3, 0)
+						-- 💡 កែតម្រូវ៖ ទម្លាក់តួអង្គឱ្យមកជិតដី/ស៊ុត និងផ្អាក 0.3s ឱ្យ Server Sync ទីតាំងមុននឹងលួច
+						local rt = getRoot()
+						if rt then
+							rt.CFrame = CFrame.new(pos + Vector3.new(0, 1.5, 0))
+							rt.AssemblyLinearVelocity = Vector3.zero
+						end
+						task.wait(0.3)
+
+						local holdPos = pos + Vector3.new(0, 1.5, 0)
 						local holdUntil = os.clock() + Steal.holdSeconds
 						local lost = false
 						while os.clock() < holdUntil and not stopped() do
@@ -1080,7 +1050,7 @@ local function stealLoop(myToken)
 								pcall(function()
 									eggWorld.AskFieldEggCarry:InvokeServer({Uid = target.Uid})
 								end)
-								task.wait(0.3)
+								task.wait(0.2)
 							end
 							if myCarriedEgg() then
 								lastUid = target.Uid
@@ -1113,7 +1083,7 @@ function Steal.set(on)
 end
 
 ------------------------------------------------------------
--- UI SETUP (Oliver Interface)[span_10](start_span)[span_10](end_span)
+-- UI SETUP (Oliver Interface)[span_5](start_span)[span_5](end_span)
 ------------------------------------------------------------
 local BG = Color3.fromRGB(16, 17, 24)
 local BG2 = Color3.fromRGB(22, 23, 32)
@@ -1444,7 +1414,7 @@ local function cfgReset()
 	Steal.mode = "High Speed User Normal"
 	Steal.rarities = {}
 	Steal.holdSeconds = 5
-	Steal.speed = 600
+	Steal.speed = 350
 	refreshAll()
 end
 
@@ -1472,7 +1442,7 @@ local function cfgLoad()
 		if RARITY_COLORS[n] then Steal.rarities[n] = true end
 	end
 	Steal.holdSeconds = math.clamp(tonumber(data.hold) or 5, 1, 10)
-	Steal.speed = math.clamp(tonumber(data.speed) or 600, MIN_SPEED, MAX_SPEED)
+	Steal.speed = math.clamp(tonumber(data.speed) or 350, MIN_SPEED, MAX_SPEED)
 	refreshAll()
 	return true, "Loaded"
 end
@@ -1542,4 +1512,4 @@ task.spawn(function()
 end)
 
 pcall(cfgLoad)
-print("[SenaV4 + OLIVER] Integrated Script with Takeoff & Anti-Speed Bypass Initialized!")
+print("[SenaV4 + OLIVER] Fixed Anti-Desync & Server Accept Script Initialized!")
