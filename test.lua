@@ -1,186 +1,38 @@
--- [[ SenaV4 Hub & OLIVER Auto Steal - Tween Delivery ]] --
+-- OLIVER | Steal an Egg  -  Auto Steal (Tween)
+-- ដំណើរការតាម executor (ត្រូវការ require ក្នុង ReplicatedStorage)
+
 local Players = game:GetService("Players")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local ProximityPromptService = game:GetService("ProximityPromptService")
-local localPlayer = Players.LocalPlayer
-local RunService = game:GetService("RunService")
+local UIS = game:GetService("UserInputService")
+local RS = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
-local TeleportService = game:GetService("TeleportService")
-local Workspace = game:GetService("Workspace")
-local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
 local HttpService = game:GetService("HttpService")
-
-local function fn()
-	return Workspace:FindFirstChild("World") or Workspace:FindFirstChild("__OBJECTS")
-end
-
-local genv = getgenv and getgenv() or _G
-
-if type(genv.__SenaV4HubShutdown) == "function" then
-	pcall(genv.__SenaV4HubShutdown)
-end
-
-local senaV4HubSession = {}
-genv.__SenaV4HubSession = senaV4HubSession
-
-local function fn2()
-	return genv.__SenaV4HubSession == senaV4HubSession
-end
-
--- ប្រព័ន្ធសុវត្ថិភាព និង Anti-Tamper[span_0](start_span)[span_0](end_span)
-do
-	local tbl2 = {"hookfunction", "hookmetamethod", "getconnections", "getgc", "getrawmetatable", "firetouchinterest", "newcclosure", "getnamecallmethod", "checkcaller", "getcallingscript"}
-	local iscclosure = genv.iscclosure or rawget(_G, "iscclosure")
-	local isfunctionhooked = genv.isfunctionhooked or rawget(_G, "isfunctionhooked")
-	local tbl3 = {}
-
-	for i, v2 in ipairs(tbl2) do
-		tbl3[v2] = genv[v2]
-	end
-
-	local function fn3(arg)
-		if type(arg) ~= "function" then
-			return false
-		end
-
-		if type(iscclosure) == "function" then
-			local ok, result = pcall(iscclosure, arg)
-			if ok and result == false then
-				return true
-			end
-		end
-
-		if type(isfunctionhooked) == "function" then
-			local ok, result = pcall(isfunctionhooked, arg)
-			if ok and result == true then
-				return true
-			end
-		end
-
-		return false
-	end
-
-	local function fn4()
-		for i, v2 in ipairs(tbl2) do
-			local v3 = genv[v2]
-
-			if v3 ~= tbl3[v2] then
-				return "api:" .. v2
-			elseif fn3(v3) then
-				return "api:" .. v2
-			end
-		end
-
-		local getrawmetatable = tbl3.getrawmetatable
-
-		if type(getrawmetatable) == "function" then
-			local ok, result = pcall(getrawmetatable, game)
-
-			if ok and type(result) == "table" then
-				for i, v2 in ipairs({"__namecall", "__index", "__newindex"}) do
-					if fn3(rawget(result, v2)) then
-						return "mt:" .. v2
-					end
-				end
-			end
-		end
-
-		local remoteEvent = Instance.new("RemoteEvent")
-		local remoteFunction = Instance.new("RemoteFunction")
-		local v2 = if fn3(remoteEvent.FireServer) then "remote:FireServer" else if fn3(remoteFunction.InvokeServer) then "remote:InvokeServer" else nil
-		remoteEvent:Destroy()
-		remoteFunction:Destroy()
-		return v2
-	end
-
-	local function fn5(arg)
-		if genv.__SenaV4TamperRejoining then
-			return
-		end
-		genv.__SenaV4TamperRejoining = true
-		warn("[Sena] tamper detected (" .. tostring(arg) .. ") - rejoining")
-
-		pcall(function()
-			TeleportService:TeleportToPlaceInstance(game.PlaceId, game.JobId, localPlayer)
-		end)
-
-		task.delay(5, function()
-			pcall(function()
-				TeleportService:Teleport(game.PlaceId, localPlayer)
-			end)
-		end)
-	end
-
-	local ok, result = pcall(fn4)
-
-	if ok and result then
-		fn5(result)
-	end
-
-	task.spawn(function()
-		while fn2() do
-			task.wait(3)
-			local ok2, result2 = pcall(fn4)
-			if ok2 and result2 then
-				fn5(result2)
-				break
-			end
-		end
-	end)
-end
-
-genv.__SenaV4IdentityGetter = genv.getthreadidentity or genv.get_thread_identity or genv.getidentity or genv.getthreadcontext or genv.get_thread_context
-genv.__SenaV4IdentitySetter = genv.setthreadidentity or genv.set_thread_identity or genv.setidentity or genv.setthreadcontext or genv.set_thread_context
-local senaV4IdentitySetter = genv.__SenaV4IdentitySetter
-
-if type(senaV4IdentitySetter) == "function" then
-	pcall(senaV4IdentitySetter, 8)
-	genv.__SenaV4UICapabilityIdentity = 8
-end
-
-if type(genv.__SenaV4TweenRuntimeCleanup) == "function" then
-	pcall(genv.__SenaV4TweenRuntimeCleanup)
-end
-
-if type(genv.__SenaV4EggRuntimeCleanup) == "function" then
-	pcall(genv.__SenaV4EggRuntimeCleanup)
-end
-
-if type(genv.__SenaV4AntiGuardCleanup) == "function" then
-	pcall(genv.__SenaV4AntiGuardCleanup)
-end
-
--- Guard Presentation / Bypass
-pcall(function()
-	local GuardPresentationComponent = require(ReplicatedStorage.Shared.Modules.GuardAreas.GuardPresentationComponent)
-	if type(GuardPresentationComponent) == "table" then
-		genv.__SenaV4GuardPresentOrig = genv.__SenaV4GuardPresentOrig or {PlayWake = GuardPresentationComponent.PlayWake, PlayHit = GuardPresentationComponent.PlayHit}
-		local function playWake() end
-		GuardPresentationComponent.PlayWake = playWake
-		GuardPresentationComponent.PlayHit = function() return 0 end
-		GuardPresentationComponent.PlayAfterWake = playWake
-		GuardPresentationComponent.ScheduleAfterWake = playWake
-	end
-end)
+local player = Players.LocalPlayer
 
 ------------------------------------------------------------
--- OLIVER | Steal an Egg UI & Speed 1000 Delivery Integration
+-- CONFIG
 ------------------------------------------------------------
 local TITLE = "OLIVER."
 local VERSION = "V3"
-local LOGO_ID = "rbxassetid://0"
+local LOGO_ID = "rbxassetid://0" -- ← ដាក់ Logo ID របស់អ្នកនៅទីនេះ (ឧ. "rbxassetid://123456789")
 local ACCENT = Color3.fromRGB(110, 120, 255)
 
-local SAFE_POS = Vector3.new(542.93, 71.5, -405.58)
+local SAFE_POS = Vector3.new(542.93, 71.5, -405.58) -- safe area (ផ្ទះ)
 local SAFE_RADIUS = 30
 
-local EggState = require(ReplicatedStorage.Client.EggState)
-local Remotes = require(ReplicatedStorage.Shared.Remotes)
-local AreaEggs = require(ReplicatedStorage.Shared.Types.AreaEggs)
-local Assets = require(ReplicatedStorage.Data.Assets)
+------------------------------------------------------------
+-- Modules របស់ហ្គេម (ដូចក្នុង Sena)
+------------------------------------------------------------
+local EggState = require(RS.Client.EggState)
+local Remotes = require(RS.Shared.Remotes)
+local AreaEggs = require(RS.Shared.Types.AreaEggs)
+local Assets = require(RS.Data.Assets)
 local eggWorld = Remotes.EggWorld
-local okER, EggRecords = pcall(function() return require(ReplicatedStorage.Shared.Util.EggRecords) end)
+local okER, EggRecords = pcall(function() return require(RS.Shared.Util.EggRecords) end)
 
+------------------------------------------------------------
+-- AUTO STEAL (Tween)
+------------------------------------------------------------
 local RARITIES = {"Common", "Uncommon", "Rare", "Epic", "Legendary", "Mythic", "Cosmic", "Secret", "Eternal", "Divine"}
 local RARITY_COLORS = {
 	Common = Color3.fromRGB(170, 175, 190),
@@ -195,21 +47,19 @@ local RARITY_COLORS = {
 	Divine = Color3.fromRGB(255, 245, 200),
 }
 local MODES = {
-	{key = "Instant", name = "Instant Steal (Recommended)", desc = "Bait guard, hop to egg, drop in Safe"},
-	{key = "Tween", name = "Tween", desc = "Tween to egg and to Safe"},
+	{name = "High Speed User Normal", desc = "Sena ground movement (per-frame, ground-safe)"},
 }
 
 local Steal = {
-	mode = "Instant",
 	enabled = false,
 	status = "Idle",
 	target = "-",
 	carrying = false,
-	rarities = {},
-	holdSeconds = 5,
-	speed = 350, -- ល្បឿនពេលទៅយក Egg (តាមการកំណត់ក្នុង UI/Game)
-	deliverSpeed = 450, -- ល្បឿនពេលដឹកពងមក Base (រក Sweet spot: 350 ត្រូវ Guard តាម / 600 Server បដិសេធ)
-	vip = {Secret = true, Eternal = true, Divine = true},
+	mode = "High Speed User Normal",
+	rarities = {},      -- ទទេ = យកទាំងអស់ (ល្អបំផុតមុន)
+	holdSeconds = 5,    -- ឈរលើស៊ុតមុនយក (Sena: ~5s)
+	speed = 600,        -- Sena: ค่าเริ่มต้น 600 (min 200 / max 1000)
+	vip = {Secret = true, Eternal = true, Divine = true}, -- មិនរំលង ព្យាយាមរហូត
 }
 local token = 0
 
@@ -227,6 +77,7 @@ local function rarityRank(rec)
 	return 0
 end
 
+-- ទម្ងន់ស៊ុត (kg) ដូច Sena: EggRecords.WeightKgForScale(AssetCategory, AssetScale)
 local function weightOf(rec)
 	if okER and EggRecords and type(EggRecords.WeightKgForScale) == "function" then
 		local ok, r = pcall(EggRecords.WeightKgForScale, rec.AssetCategory, tonumber(rec.AssetScale) or 1)
@@ -245,29 +96,28 @@ local function passesFilter(rec)
 end
 
 local function getRoot()
-	local c = localPlayer.Character
+	local c = player.Character
 	return c and c:FindFirstChild("HumanoidRootPart"), c and c:FindFirstChildOfClass("Humanoid")
 end
 
-local function safeCFrame()
-	local x, y, z = SAFE_POS.X, SAFE_POS.Y, SAFE_POS.Z
+local function safeTarget()
 	local params = RaycastParams.new()
 	params.FilterType = Enum.RaycastFilterType.Exclude
-	params.FilterDescendantsInstances = {localPlayer.Character}
-	local hit = Workspace:Raycast(Vector3.new(x, y + 30, z), Vector3.new(0, -80, 0), params)
-	return CFrame.new(x, hit and hit.Position.Y + 3.2 or y, z)
-end
-
-local function getSafePos()
-	return safeCFrame().Position
+	params.FilterDescendantsInstances = {player.Character}
+	local hit = workspace:Raycast(SAFE_POS + Vector3.new(0, 60, 0), Vector3.new(0, -200, 0), params)
+	if hit then
+		return Vector3.new(SAFE_POS.X, hit.Position.Y + 3.2, SAFE_POS.Z)
+	end
+	return SAFE_POS
 end
 
 local function inSafe(root)
-	local d = root.Position - getSafePos()
+	local d = root.Position - SAFE_POS
 	return Vector2.new(d.X, d.Z).Magnitude <= SAFE_RADIUS and math.abs(d.Y) <= 18
 end
 
-local Protect = {hb = nil, autoRotate = nil}
+-- ការពារតួពេលផ្លាស់ទីលឿន (ដូច Sena): ជើងទ្រ hover pad មើលមិនឃើញ + KillPartIgnore + AutoRotate បិទ
+local Protect = {pad = nil, conn = nil, hb = nil, autoRotate = nil}
 
 local function ensureProtect()
 	local root, hum = getRoot()
@@ -279,7 +129,21 @@ local function ensureProtect()
 		Protect.autoRotate = hum.AutoRotate
 		hum.AutoRotate = false
 	end
+	if not (Protect.pad and Protect.pad.Parent) then
+		local part = Instance.new("Part")
+		part.Name = "OliverHoverPad"
+		part.Anchored = true
+		part.CanCollide = true
+		part.CanQuery = false -- កុំឱ្យ raycast របស់ safeTarget ប៉ះ
+		part.CanTouch = false
+		part.CastShadow = false
+		part.Transparency = 1
+		part.Size = Vector3.new(8, 1, 8)
+		part.Parent = workspace
+		Protect.pad = part
+	end
 	if not Protect.hb then
+		-- ដូច Sena (health pinner): កុំឱ្យតួងាប់ពេលផ្លាស់ទីលឿន (ក ដាច់ / ធ្លាក់ / ragdoll)
 		local function pin()
 			local r, h = getRoot()
 			if not r or not h then return end
@@ -299,10 +163,22 @@ local function ensureProtect()
 		pin()
 		Protect.hb = RunService.Heartbeat:Connect(pin)
 	end
+	if not Protect.conn then
+		Protect.conn = RunService.PreSimulation:Connect(function()
+			local r, h = getRoot()
+			if r and h and Protect.pad and Protect.pad.Parent then
+				local p = r.Position
+				local feet = h.HipHeight + r.Size.Y / 2
+				Protect.pad.CFrame = CFrame.new(p.X, p.Y - feet - 0.55, p.Z)
+			end
+		end)
+	end
 end
 
 local function stopProtect()
+	if Protect.conn then Protect.conn:Disconnect() Protect.conn = nil end
 	if Protect.hb then Protect.hb:Disconnect() Protect.hb = nil end
+	if Protect.pad then Protect.pad:Destroy() Protect.pad = nil end
 	local root, hum = getRoot()
 	if root then root:SetAttribute("KillPartIgnore", nil) end
 	if hum then
@@ -318,39 +194,83 @@ local function stopProtect()
 	Protect.autoRotate = nil
 end
 
+-- ចលនា "High Speed User Normal" ពី Sena: ផ្លាស់ទីរាល់ frame ទៅរកគោលដៅ
 local MIN_SPEED, MAX_SPEED = 200, 1000
 
--- Tween ទៅទីតាំង (Linear) ដោយប្រើល្បឿន Steal.speed
-local function travel(pos, abort)
-	local root, hum = getRoot()
-	if not root or not hum then return false end
-	local speed = math.clamp(Steal.speed, MIN_SPEED, MAX_SPEED)
-	local rot = root.CFrame - root.CFrame.Position
-	local t = math.max((root.Position - pos).Magnitude / speed, 0.05)
-	local tw = TweenService:Create(root, TweenInfo.new(t, Enum.EasingStyle.Linear), {CFrame = CFrame.new(pos) * rot})
-	local done = false
-	local conn = tw.Completed:Connect(function() done = true end)
-	tw:Play()
-	while not done do
-		root, hum = getRoot()
-		if not root or not hum or hum.Health <= 0 or (abort and abort()) then
-			tw:Cancel()
-			conn:Disconnect()
-			if root then root.AssemblyLinearVelocity = Vector3.zero end
-			return false
-		end
-		root.AssemblyLinearVelocity = Vector3.zero
-		RunService.Heartbeat:Wait()
+local function feetOffset(root, hum)
+	if hum.RigType == Enum.HumanoidRigType.R15 then
+		return root.Size.Y * 0.5 + math.max(hum.HipHeight, 0.5)
 	end
-	conn:Disconnect()
-	root, hum = getRoot()
-	if root then root.AssemblyLinearVelocity = Vector3.zero end
-	return root ~= nil
+	return root.Size.Y * 0.5 + 2
+end
+
+local function groundYAt(x, z, char)
+	local root = char and char:FindFirstChild("HumanoidRootPart")
+	local origin = Vector3.new(x, (root and root.Position.Y or SAFE_POS.Y) + 60, z)
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Exclude
+	params.FilterDescendantsInstances = {char}
+	params.IgnoreWater = true
+	local hit = workspace:Raycast(origin, Vector3.new(0, -300, 0), params)
+	return hit and hit.Position.Y
+end
+
+local function travel(pos, abort)
+	local speed = math.clamp(Steal.speed, MIN_SPEED, MAX_SPEED)
+	local slowUntil, lastMag, arrivedAt = 0, nil, nil
+	while true do
+		local root, hum = getRoot()
+		if not root or not hum or hum.Health <= 0 then return false end
+		if abort and abort() then return false end
+		local dt = RunService.Heartbeat:Wait()
+		root, hum = getRoot()
+		if not root or not hum then return false end
+		dt = math.max(math.min(dt, 0.15), 1 / 240)
+
+		local cur = root.Position
+		local delta = pos - cur
+		local mag = delta.Magnitude
+		local flat = Vector3.new(delta.X, 0, delta.Z)
+		local look = root.CFrame.LookVector
+		local lookFlat = Vector3.new(look.X, 0, look.Z)
+		local face = flat.Magnitude > 0.001 and flat.Unit
+			or (lookFlat.Magnitude > 0.001 and lookFlat.Unit or Vector3.new(0, 0, -1))
+
+		-- server ទាញត្រឡប់ (ចម្ងាយកើនឡើង > 2) → បន្ថយល្បឿន 0.5 វិនាទី (ដូច Sena)
+		if lastMag and mag > lastMag + 2 then
+			slowUntil = os.clock() + 0.5
+		end
+		lastMag = mag
+		local curSpeed = os.clock() < slowUntil and math.max(MIN_SPEED, speed * 0.45) or speed
+		local step = curSpeed * dt
+
+		if mag <= math.max(step, 0.05) then
+			-- ដល់ហើយ: ឈរនៅ 0.4 វិនាទី
+			root.CFrame = CFrame.lookAt(pos, pos + face)
+			root.AssemblyLinearVelocity = Vector3.zero
+			arrivedAt = arrivedAt or os.clock()
+			if os.clock() - arrivedAt >= 0.4 then return true end
+		else
+			arrivedAt = nil
+			local nextPos = cur + delta.Unit * math.min(step, mag)
+			if dt >= 1 / 30 then -- fps ទាប: កុំឱ្យធ្លាក់ក្រោមដី
+				local gy = groundYAt(nextPos.X, nextPos.Z, player.Character)
+				if gy then
+					local minY = gy + feetOffset(root, hum)
+					if nextPos.Y < minY then
+						nextPos = Vector3.new(nextPos.X, minY, nextPos.Z)
+					end
+				end
+			end
+			root.CFrame = CFrame.lookAt(nextPos, nextPos + face)
+			root.AssemblyLinearVelocity = Vector3.zero
+		end
+	end
 end
 
 local function wallSealed()
 	local ok, res = pcall(function()
-		return require(ReplicatedStorage.Client.AreaEggResetWall).IsSealed()
+		return require(RS.Client.AreaEggResetWall).IsSealed()
 	end)
 	return ok and res == true
 end
@@ -363,7 +283,7 @@ end
 
 local function myCarriedEgg()
 	for _, rec in ipairs(readRecords()) do
-		if rec.State == AreaEggs.States.Carried and rec.CarrierUserId == localPlayer.UserId then
+		if rec.State == AreaEggs.States.Carried and rec.CarrierUserId == player.UserId then
 			return rec
 		end
 	end
@@ -380,6 +300,7 @@ local function eggPos(rec)
 	return cf and cf.Position
 end
 
+-- ជ្រើសស៊ុត: rarity ខ្ពស់បំផុតមុន → បើ rarity ដូចគ្នា យកអា kg ច្រើនជាង → បើ kg ដូចគ្នា យកអាជិតជាង
 local function pickTarget(skip)
 	local root = getRoot()
 	if not root then return nil end
@@ -405,318 +326,6 @@ local function pickTarget(skip)
 	return best
 end
 
-
-------------------------------------------------------------
--- INSTANT STEAL (ពី Open.lua / Senav6.2Hub)
--- 1) យក Primer Egg ក្នុង Forest  2) ទាញ Guard ឲ្យវាយ (Bait)
--- 3) Hop ទៅ Egg គោលដៅ ហើយ Hover រង់ចាំ  4) Grab  5) Hop ទៅ Safe រួច Drop
-------------------------------------------------------------
-local HOP = {studs = 500, gap = 0.15, height = 40}
-local HOVER_UP = 14
-local GUARD_FRONT = 2.5
-local STRIKE_TIME = 1.5
-local KB_SPEED = 18
-
-local instantPhase = nil -- "priming" | "hunting" | nil
-
--- Guard Hit Distance (ពី Open.lua): ពេល Bait = 25 studs, ក្រៅពីនោះ Guard មិនអាចវាយបាន (កុំឲ្យងាប់)
-local function installGuardHook()
-    local ok = pcall(function()
-        local Policy = require(ReplicatedStorage.Shared.Modules.GuardAreas.GuardChasePolicy)
-        if type(Policy) ~= "table" or type(Policy.ResolveHitDistance) ~= "function" then return end
-        if not genv.__OliverGuardOrig then genv.__OliverGuardOrig = Policy.ResolveHitDistance end
-        local orig = genv.__OliverGuardOrig
-        Policy.ResolveHitDistance = function(a)
-            if Steal.enabled then
-                if instantPhase == "priming" then return 25 end
-                return -math.huge
-            end
-            return orig(a)
-        end
-    end)
-    if not ok then warn("[Instant] GuardChasePolicy hook failed") end
-end
-installGuardHook()
-
-local function tp(cf)
-    local r = getRoot()
-    if not r then return false end
-    r.AssemblyLinearVelocity = Vector3.zero
-    r.AssemblyAngularVelocity = Vector3.zero
-    r.CFrame = cf
-    r.AssemblyLinearVelocity = Vector3.zero
-    r.AssemblyAngularVelocity = Vector3.zero
-    return true
-end
-
-local function feetOffset(root, hum)
-    if hum.RigType == Enum.HumanoidRigType.R15 then
-        return root.Size.Y * 0.5 + math.max(hum.HipHeight, 0.5)
-    end
-    return root.Size.Y * 0.5 + 2
-end
-
-local function dataPing()
-    local ok, v = pcall(function()
-        return game:GetService("Stats").Network.ServerStatsItem["Data Ping"]:GetValue()
-    end)
-    return ok and tonumber(v) or 0
-end
-
-local function forestGuard()
-    local w = fn()
-    local areas = w and w:FindFirstChild("Areas")
-    local ga = areas and areas:FindFirstChild("GuardAreas")
-    local forest = ga and ga:FindFirstChild("Forest")
-    local g = forest and forest:FindFirstChild("Guard")
-    return g, g and g:FindFirstChild("HumanoidRootPart")
-end
-
-local function choosePrimer(excludeUid)
-    local _, ghrp = forestGuard()
-    local root = getRoot()
-    local origin = ghrp and ghrp.Position or (root and root.Position)
-    if not origin then return nil end
-    local best, bestScore
-    for _, rec in ipairs(readRecords()) do
-        if rec.State == AreaEggs.States.Slot and rec.AreaId == "Forest" and rec.Uid ~= excludeUid then
-            local pos = eggPos(rec)
-            if pos then
-                local score = -(pos - origin).Magnitude - rarityRank(rec) * 100
-                if not bestScore or score > bestScore then best, bestScore = rec, score end
-            end
-        end
-    end
-    return best
-end
-
-local function knockbackLanded()
-    local root, hum = getRoot()
-    if not root or not hum then return false end
-    if hum.PlatformStand or hum.Sit then return true end
-    local st = hum:GetState()
-    if st == Enum.HumanoidStateType.Ragdoll or st == Enum.HumanoidStateType.FallingDown
-        or st == Enum.HumanoidStateType.PlatformStanding then return true end
-    return root.AssemblyLinearVelocity.Magnitude > KB_SPEED
-end
-
--- ទាញ Guard ឲ្យវាយ (Primer ក្នុងដៃ) ដល់ពេល Knockback
-local function baitGuard(primer, stopped)
-    local gmodel, ghrp = forestGuard()
-    if not ghrp then return false end
-    local collider = gmodel:FindFirstChild("Collider") or ghrp
-    local strike = Remotes.GuardPatrol and Remotes.GuardPatrol.ForestStrike
-    local anchor
-    local landed = false
-    local untilT = os.clock() + STRIKE_TIME
-    while os.clock() < untilT and not stopped() do
-        local root, hum = getRoot()
-        if not root or not hum then return false end
-        local gp = ghrp.Position
-        local look = ghrp.CFrame.LookVector * GUARD_FRONT
-        anchor = Vector3.new(gp.X + look.X, root.Position.Y, gp.Z + look.Z)
-        root.CFrame = CFrame.lookAt(anchor, Vector3.new(gp.X, anchor.Y, gp.Z))
-        root.AssemblyLinearVelocity = Vector3.zero
-        if firetouchinterest then
-            pcall(function()
-                firetouchinterest(root, collider, 0)
-                firetouchinterest(root, collider, 1)
-            end)
-        end
-        if strike then
-            pcall(function() strike:FireServer({EggUid = primer.Uid, GuardCFrame = ghrp.CFrame}) end)
-        end
-        local t = os.clock() + 0.05
-        while os.clock() < t do
-            if knockbackLanded() then landed = true break end
-            RunService.Heartbeat:Wait()
-        end
-        if landed then break end
-    end
-    if landed then
-        local settleEnd = os.clock() + 0.35
-        while os.clock() < settleEnd and not stopped() do
-            local root, hum = getRoot()
-            if not root then return false end
-            if hum then
-                pcall(function()
-                    hum.PlatformStand = false
-                    hum.Sit = false
-                    hum:ChangeState(Enum.HumanoidStateType.GettingUp)
-                end)
-            end
-            if anchor then root.CFrame = CFrame.new(anchor) end
-            root.AssemblyLinearVelocity = Vector3.zero
-            root.AssemblyAngularVelocity = Vector3.zero
-            RunService.Heartbeat:Wait()
-        end
-    end
-    return landed, anchor
-end
-
--- Hop ជាជំហាន 500 studs នៅកម្ពស់ +40 (ដូច _hopRoot ក្នុង Open.lua)
-local function hopRoot(cf, abort)
-    local r0, h0 = getRoot()
-    if not r0 or not h0 then return false end
-    pcall(function() h0.AutoRotate = false end)
-    local target = cf.Position
-    local cruiseY = target.Y + HOP.height
-    local deadline = os.clock() + 20
-    while os.clock() < deadline do
-        local r, h = getRoot()
-        if not r or not h or h.Health <= 0 or (abort and abort()) then return false end
-        local p = r.Position
-        local flat = Vector3.new(target.X - p.X, 0, target.Z - p.Z)
-        if flat.Magnitude <= HOP.studs then
-            return tp(cf)
-        end
-        local np = Vector3.new(p.X, cruiseY, p.Z) + flat.Unit * HOP.studs
-        local c2 = CFrame.new(np, np + flat.Unit)
-        tp(c2)
-        local gapEnd = os.clock() + HOP.gap
-        while os.clock() < gapEnd do
-            RunService.Heartbeat:Wait()
-            local r2, h2 = getRoot()
-            if not r2 or not h2 or (abort and abort()) then return false end
-            tp(c2)
-        end
-    end
-    return false
-end
-
-local function settleSeconds(areaId)
-    local s = tostring(areaId or ""):lower()
-    local a, b = 8, 3.5
-    if s:find("enchanted") then a, b = 18, 12
-    elseif s:find("light") or s:find("dark") then a, b = 16, 10
-    elseif s:find("titan") or s:find("cosmic") or s:find("cherry") then a, b = 10, 8 end
-    local hold = math.clamp(tonumber(Steal.holdSeconds) or 5, 1, 10)
-    local secs = math.max(b, a * ((11 - hold) / 6))
-    if dataPing() > 300 then secs += 1 end
-    return secs
-end
-
-local function requestGrab(rec, secs, stopped)
-    local untilAt = os.clock() + secs
-    while os.clock() < untilAt and not stopped() do
-        if myCarriedEgg() then return true end
-        pcall(function() eggWorld.AskFieldEggCarry:InvokeServer({Uid = rec.Uid}) end)
-        task.wait(0.15)
-    end
-    return myCarriedEgg() ~= nil
-end
-
--- return: true = កាន់ Egg គោលដៅហើយ | false = បរាជ័យ | "retry" = ព្យាយាមម្ដងទៀត (មិន Skip)
-local function instantStealInner(target, stopped, skip)
-    local rname = rarityOf(target)
-    local function gone(uid)
-        local r = findByUid(uid)
-        return not r or (r.State ~= AreaEggs.States.Slot and r.State ~= AreaEggs.States.Dropped)
-    end
-
-    -- 1. Primer
-    local primer = choosePrimer(target.Uid)
-    if not primer then
-        Steal.status = "Preparing steal"
-        task.wait(0.25)
-        return "retry"
-    end
-    local root, hum = getRoot()
-    local ppos = eggPos(primer)
-    if not root or not hum or not ppos then return "retry" end
-    skip[primer.Uid] = true
-    instantPhase = "priming"
-
-    Steal.status = "Priming guard"
-    local primeCF = CFrame.new(ppos + Vector3.new(0, feetOffset(root, hum) + 0.15, 0))
-    tp(primeCF)
-    local got = false
-    local untilAt = os.clock() + 3
-    while os.clock() < untilAt and not stopped() do
-        if myCarriedEgg() then got = true break end
-        tp(primeCF)
-        pcall(function() eggWorld.AskFieldEggCarry:InvokeServer({Uid = primer.Uid}) end)
-        task.wait(0.15)
-    end
-    if stopped() then return false end
-    if not got then return "retry" end
-
-    -- 2. Bait guard
-    Steal.status = "Baiting guard"
-    local landed, anchor = baitGuard(primer, stopped)
-    instantPhase = "hunting"
-    local c = myCarriedEgg()
-    if c and c.Uid == primer.Uid then
-        pcall(EggState.DropFieldEgg, "PlayerRequest")
-        task.wait(0.1)
-    end
-    if stopped() then return false end
-    if not landed then return "retry" end
-
-    -- 3. Hunt target
-    if gone(target.Uid) then return "retry" end
-    local r = findByUid(target.Uid)
-    local tpos = r and eggPos(r)
-    root, hum = getRoot()
-    if not tpos or not root or not hum then return "retry" end
-    if anchor then tp(CFrame.new(anchor)) end
-
-    local dest = CFrame.new(tpos + Vector3.new(0, feetOffset(root, hum) + 0.15, 0))
-    local hover = dest + Vector3.new(0, HOVER_UP, 0)
-    local function abort() return stopped() or gone(target.Uid) end
-
-    Steal.status = "Heading to " .. rname
-    if not hopRoot(hover, abort) then return "retry" end
-
-    local secs = settleSeconds(r.AreaId)
-    local untilT = os.clock() + secs
-    while os.clock() < untilT do
-        if abort() then
-            if stopped() then return false end
-            return "retry"
-        end
-        Steal.status = string.format("Securing %s (%.1fs)", rname, math.max(0, untilT - os.clock()))
-        tp(hover)
-        RunService.Heartbeat:Wait()
-    end
-
-    if not hopRoot(dest, abort) then return "retry" end
-    Steal.status = "Grabbing " .. rname
-    return requestGrab(target, 3, stopped)
-end
-
-local function instantSteal(target, stopped, skip)
-    local res = instantStealInner(target, stopped, skip)
-    instantPhase = nil
-    return res
-end
-
-local function instantDeliver(stopped)
-    local sc = safeCFrame()
-    for _ = 1, 3 do
-        if stopped() or not myCarriedEgg() then break end
-        Steal.status = "Bringing egg home"
-        hopRoot(sc, function() return stopped() or not myCarriedEgg() end)
-        if stopped() then return end
-        if myCarriedEgg() then
-            local ping = 0.05
-            pcall(function() ping = localPlayer:GetNetworkPing() or 0.05 end)
-            task.wait(math.clamp(0.5 + ping * 4, 0.8, 2))
-            if stopped() then return end
-            if myCarriedEgg() then
-                Steal.status = "Dropping egg in Safe"
-                pcall(EggState.DropFieldEgg, "PlayerRequest")
-            end
-            local t = os.clock() + 0.85
-            while not stopped() and myCarriedEgg() and os.clock() < t do
-                RunService.Heartbeat:Wait()
-            end
-        end
-        if not myCarriedEgg() then break end
-    end
-    task.wait(0.4)
-end
-
 local function stealLoop(myToken)
 	local lastUid
 	local skip = {}
@@ -733,27 +342,23 @@ local function stealLoop(myToken)
 			Steal.carrying = carried ~= nil
 
 			if carried then
+				-- ដឹកទៅ safe area ហើយឈរចាំ server ទទួលស៊ុត
 				lastUid = carried.Uid
-				Steal.status = string.format("Delivering egg (Speed %d)", Steal.deliverSpeed)
-				if Steal.mode == "Instant" then
-					instantDeliver(stopped)
-					lastUid = nil
-				elseif not inSafe(root) then
-					local oldSpeed = Steal.speed
-					Steal.speed = Steal.deliverSpeed
-					travel(getSafePos(), function() return stopped() or not myCarriedEgg() end)
-					Steal.speed = oldSpeed
+				Steal.status = "Delivering egg"
+				if not inSafe(root) then
+					travel(safeTarget(), function() return stopped() or not myCarriedEgg() end)
 				else
 					Steal.status = "Waiting for deposit"
+					root.CFrame = CFrame.new(safeTarget()) * (root.CFrame - root.CFrame.Position)
 					root.AssemblyLinearVelocity = Vector3.zero
-					task.wait(0.3) -- ពេលរង់ចាំខ្លីឱ្យ Server ទទួលស៊ុតចូល Base
+					task.wait(0.1)
 				end
 			elseif wallSealed() then
 				Steal.status = "Egg reset - waiting"
 				task.wait(0.5)
 			else
-				-- 🐢 ពេលទៅយក Egg ប្រើល្បឿនធម្មតាដែលអ្នកកំណត់ក្នុង Game/UI (Steal.speed)
 				local target
+				-- ស៊ុតទើបធ្លាក់ ត្រូវរើសវិញមុនគេ
 				if lastUid then
 					local rec = findByUid(lastUid)
 					if rec and rec.State == AreaEggs.States.Dropped then
@@ -770,13 +375,6 @@ local function stealLoop(myToken)
 					Steal.target = "-"
 					Steal.status = "No egg found"
 					task.wait(1)
-				elseif Steal.mode == "Instant" then
-					local res = instantSteal(target, stopped, skip)
-					if res == true then
-						lastUid = target.Uid
-					elseif res == false and not stopped() and not isVip(target) then
-						skip[target.Uid] = true
-					end
 				else
 					local rname = rarityOf(target)
 					local wtxt = string.format("%s %.1fkg", rname, weightOf(target))
@@ -790,14 +388,8 @@ local function stealLoop(myToken)
 					end)
 
 					if arrived and not stopped() then
-						local rt = getRoot()
-						if rt then
-							rt.CFrame = CFrame.new(pos + Vector3.new(0, 1.5, 0))
-							rt.AssemblyLinearVelocity = Vector3.zero
-						end
-						task.wait(0.3)
-
-						local holdPos = pos + Vector3.new(0, 1.5, 0)
+						-- ឈរជាប់លើស៊ុតមួយរយៈ ទើប server ឱ្យយក
+						local holdPos = pos + Vector3.new(0, 3, 0)
 						local holdUntil = os.clock() + Steal.holdSeconds
 						local lost = false
 						while os.clock() < holdUntil and not stopped() do
@@ -822,7 +414,7 @@ local function stealLoop(myToken)
 								pcall(function()
 									eggWorld.AskFieldEggCarry:InvokeServer({Uid = target.Uid})
 								end)
-								task.wait(0.2)
+								task.wait(0.3)
 							end
 							if myCarriedEgg() then
 								lastUid = target.Uid
@@ -855,7 +447,7 @@ function Steal.set(on)
 end
 
 ------------------------------------------------------------
--- UI SETUP (Oliver Interface)
+-- UI
 ------------------------------------------------------------
 local BG = Color3.fromRGB(16, 17, 24)
 local BG2 = Color3.fromRGB(22, 23, 32)
@@ -907,7 +499,7 @@ local function makeDraggable(handle, target)
 			end)
 		end
 	end)
-	UserInputService.InputChanged:Connect(function(input)
+	UIS.InputChanged:Connect(function(input)
 		if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement
 		or input.UserInputType == Enum.UserInputType.Touch) then
 			local d = input.Position - dragStart
@@ -921,7 +513,7 @@ local function makeDraggable(handle, target)
 	return function() return moved end
 end
 
-local parentGui = localPlayer:WaitForChild("PlayerGui")
+local parentGui = player:WaitForChild("PlayerGui")
 local old = parentGui:FindFirstChild("OliverAutoSteal")
 if old then old:Destroy() end
 
@@ -929,6 +521,7 @@ local gui = new("ScreenGui", {
 	Name = "OliverAutoSteal", ResetOnSpawn = false, ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
 }, parentGui)
 
+-- Window
 local main = new("Frame", {
 	Size = UDim2.fromOffset(420, 260), Position = UDim2.new(0.5, -210, 0.5, -130),
 	BackgroundColor3 = BG, ClipsDescendants = true,
@@ -937,6 +530,7 @@ corner(main, 14)
 stroke(main, STROKE, 1)
 local scale = new("UIScale", {Scale = 1}, main)
 
+-- Header
 local header = new("Frame", {Size = UDim2.new(1, 0, 0, 40), BackgroundColor3 = BG2}, main)
 corner(header, 14)
 new("Frame", {Size = UDim2.new(1, 0, 0, 14), Position = UDim2.new(0, 0, 1, -14), BackgroundColor3 = BG2, BorderSizePixel = 0}, header)
@@ -956,6 +550,7 @@ local closeBtn = new("TextButton", {
 corner(closeBtn, 8)
 makeDraggable(header, main)
 
+-- Tab rail
 local body = new("Frame", {Size = UDim2.new(1, 0, 1, -40), Position = UDim2.fromOffset(0, 40), BackgroundTransparency = 1}, main)
 local rail = new("Frame", {Size = UDim2.new(0, 122, 1, 0), BackgroundTransparency = 1, BorderSizePixel = 0}, body)
 pad(rail, 8, 10, 8, 8)
@@ -999,6 +594,7 @@ end
 local stealPage = addTab("Main", "◆", 1)
 local settingsPage = addTab("Settings Config", "⚙", 2)
 
+-- Collapsible card (↑ = ปิด / ↓ = เปิด)
 local function makeSection(parent, title, order, startOpen)
 	local card = new("Frame", {
 		Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y,
@@ -1032,6 +628,7 @@ local function makeSection(parent, title, order, startOpen)
 	return content
 end
 
+-- Auto Steal switch card
 local toggleCard = new("Frame", {Size = UDim2.new(1, 0, 0, 56), BackgroundColor3 = PANEL, LayoutOrder = 0}, stealPage)
 corner(toggleCard, 10)
 local toggleStroke = stroke(toggleCard, STROKE, 1)
@@ -1059,6 +656,7 @@ toggleBtn.MouseButton1Click:Connect(function()
 	renderToggle(Steal.enabled)
 end)
 
+-- Filters / Rarity
 local filters = makeSection(stealPage, "Filters / Rarity", 1, false)
 local hintRow = new("Frame", {Size = UDim2.new(1, 0, 0, 22), BackgroundTransparency = 1, LayoutOrder = 1}, filters)
 local hint = label(hintRow, "Highest rarity first, then heaviest kg", 11, MUTED)
@@ -1097,11 +695,12 @@ clearBtn.MouseButton1Click:Connect(function()
 	for _, name in ipairs(RARITIES) do renderChip(name) end
 end)
 
-local mods = makeSection(stealPage, "Steal Mode", 2, true)
+-- MOD
+local mods = makeSection(stealPage, "MOD", 2, false)
 local modButtons = {}
 local function renderMods()
-	for key, m in pairs(modButtons) do
-		local on = key == Steal.mode
+	for name, m in pairs(modButtons) do
+		local on = name == Steal.mode
 		tween(m.btn, 0.12, {BackgroundColor3 = on and Color3.fromRGB(48, 52, 96) or PANEL2})
 		m.stroke.Color = on and ACCENT or PANEL2
 		m.dot.BackgroundColor3 = on and ACCENT or STROKE
@@ -1121,15 +720,16 @@ for i, m in ipairs(MODES) do
 	d.Position = UDim2.fromOffset(12, 23)
 	local dot = new("Frame", {Size = UDim2.fromOffset(12, 12), Position = UDim2.new(1, -24, 0.5, -6), BackgroundColor3 = STROKE}, b)
 	corner(dot, 6)
-	modButtons[m.key] = {btn = b, stroke = st, dot = dot}
+	modButtons[m.name] = {btn = b, stroke = st, dot = dot}
 	b.MouseButton1Click:Connect(function()
-		Steal.mode = m.key
+		Steal.mode = m.name
 		renderMods()
 	end)
 end
 renderMods()
 for _, name in ipairs(RARITIES) do renderChip(name) end
 
+-- Settings Config tab
 local refreshers = {}
 local function addStepper(parent, order, title, get, set, minV, maxV, stepV, suffix)
 	local row = new("Frame", {Size = UDim2.new(1, 0, 0, 34), BackgroundColor3 = PANEL2, LayoutOrder = order}, parent)
@@ -1159,8 +759,7 @@ end
 
 local tweenCfg = makeSection(settingsPage, "Movement Settings", 1, true)
 addStepper(tweenCfg, 1, "Hold at egg", function() return Steal.holdSeconds end, function(v) Steal.holdSeconds = v end, 1, 10, 1, "s")
-addStepper(tweenCfg, 2, "Speed (To Egg)", function() return Steal.speed end, function(v) Steal.speed = v end, MIN_SPEED, MAX_SPEED, 50, "")
-addStepper(tweenCfg, 3, "Speed (Deliver)", function() return Steal.deliverSpeed end, function(v) Steal.deliverSpeed = v end, MIN_SPEED, MAX_SPEED, 50, "")
+addStepper(tweenCfg, 2, "Speed", function() return Steal.speed end, function(v) Steal.speed = v end, MIN_SPEED, MAX_SPEED, 50, "")
 
 local CONFIG_FILE = "OLIVER_AutoSteal.json"
 local cfgSection = makeSection(settingsPage, "Config", 2, true)
@@ -1184,11 +783,10 @@ local function refreshAll()
 end
 
 local function cfgReset()
+	Steal.mode = "High Speed User Normal"
 	Steal.rarities = {}
-	Steal.holdSeconds = 0
-	Steal.mode = "Instant"
-	Steal.speed = 300
-	Steal.deliverSpeed = 450
+	Steal.holdSeconds = 5
+	Steal.speed = 600
 	refreshAll()
 end
 
@@ -1197,7 +795,7 @@ local function cfgSave()
 	local rars = {}
 	for n in pairs(Steal.rarities) do table.insert(rars, n) end
 	local data = {
-		mode = Steal.mode, rarities = rars, hold = Steal.holdSeconds, speed = Steal.speed, deliver = Steal.deliverSpeed,
+		mode = Steal.mode, rarities = rars, hold = Steal.holdSeconds, speed = Steal.speed,
 	}
 	local ok, err = pcall(function() writefile(CONFIG_FILE, HttpService:JSONEncode(data)) end)
 	return ok, ok and "Saved" or tostring(err)
@@ -1209,15 +807,14 @@ local function cfgLoad()
 	local ok, data = pcall(function() return HttpService:JSONDecode(readfile(CONFIG_FILE)) end)
 	if not ok or type(data) ~= "table" then return false, "Config file is invalid" end
 	for _, m in ipairs(MODES) do
-		if m.key == data.mode then Steal.mode = m.key end
+		if m.name == data.mode then Steal.mode = m.name end
 	end
 	Steal.rarities = {}
 	for _, n in ipairs(type(data.rarities) == "table" and data.rarities or {}) do
 		if RARITY_COLORS[n] then Steal.rarities[n] = true end
 	end
 	Steal.holdSeconds = math.clamp(tonumber(data.hold) or 5, 1, 10)
-	Steal.speed = math.clamp(tonumber(data.speed) or 350, MIN_SPEED, MAX_SPEED)
-	Steal.deliverSpeed = math.clamp(tonumber(data.deliver) or 450, MIN_SPEED, MAX_SPEED)
+	Steal.speed = math.clamp(tonumber(data.speed) or 600, MIN_SPEED, MAX_SPEED)
 	refreshAll()
 	return true, "Loaded"
 end
@@ -1237,6 +834,7 @@ cfgButton("Save", 0, Color3.fromRGB(70, 100, 230), cfgSave)
 cfgButton("Load", 1 / 3, Color3.fromRGB(60, 150, 110), cfgLoad)
 cfgButton("Reset", 2 / 3, Color3.fromRGB(150, 70, 80), function() cfgReset() return true, "Reset to default" end)
 
+-- Floating logo button
 local hasLogo = LOGO_ID ~= "" and not LOGO_ID:match("^rbxassetid://0?$")
 local fab = new("ImageButton", {
 	Size = UDim2.fromOffset(54, 54), Position = UDim2.new(0, 16, 0.5, -27),
@@ -1278,6 +876,7 @@ closeBtn.MouseButton1Click:Connect(function() setOpen(false) end)
 
 selectTab("Main")
 
+-- Live update
 task.spawn(function()
 	while gui.Parent do
 		toggleSub.Text = Steal.status
@@ -1286,5 +885,5 @@ task.spawn(function()
 	end
 end)
 
+-- ផ្ទុក config ដែលបានរក្សាទុក (បើមាន)
 pcall(cfgLoad)
-print("[OLIVER] Auto Steal (Instant + Tween) Initialized!")
