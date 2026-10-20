@@ -1,889 +1,914 @@
--- OLIVER | Steal an Egg  -  Auto Steal (Tween)
--- ដំណើរការតាម executor (ត្រូវការ require ក្នុង ReplicatedStorage)
-
+-- OLIVER v3 | Steal an Egg - Anti Guard (UI Update)
+-- Services
 local Players = game:GetService("Players")
-local UIS = game:GetService("UserInputService")
-local RS = game:GetService("ReplicatedStorage")
-local TweenService = game:GetService("TweenService")
+local CoreGui = game:GetService("CoreGui")
 local RunService = game:GetService("RunService")
-local HttpService = game:GetService("HttpService")
+local Workspace = game:GetService("Workspace")
+local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+
 local player = Players.LocalPlayer
 
-------------------------------------------------------------
--- CONFIG
-------------------------------------------------------------
-local TITLE = "OLIVER."
-local VERSION = "V3"
-local LOGO_ID = "rbxassetid://0" -- ← ដាក់ Logo ID របស់អ្នកនៅទីនេះ (ឧ. "rbxassetid://123456789")
-local ACCENT = Color3.fromRGB(110, 120, 255)
+-- ================= CONFIG =================
+local LOGO_IMAGE = "rbxassetid://77896693340732" -- Logo OLIVER (ទុកទទេ = ប្រើអក្សរ "O")
+local TWEEN_TIME = 0.04   -- ល្បឿនទៅ SafeZone
+local STAY_TIME = 0.6     -- រយៈពេលនៅ SafeZone មុនត្រឡប់ (វិនាទី)
+local RETURN_TIME = 0.05  -- ល្បឿនត្រឡប់ទៅកន្លែងដើម
+local GLITCH = true       -- ញ័រលឿនពេលនៅ SafeZone
+local RETURN_BACK = true  -- ត្រឡប់ទៅកន្លែងដើមវិញ
+local SHOW_LOADING = true -- បង្ហាញ Loading ពេញអេក្រង់ពេលទៅ SafeZone
+-- រូបតំណាង Card (ដាក់ ID លេខ ឬ "rbxassetid://..." ; ទុកទទេ = ប្រើ Emoji)
+local ICON_ANTIGUARD = "rbxassetid://74028582328837" -- ឧ. "rbxassetid://123456789" ឬ "123456789"
+local ICON_INSTANT = "rbxassetid://127650947428392"
+local ICON_ESP = "rbxassetid://115470460729074" -- រូបតំណាង ESP (ទុកទទេ = ប្រើ Emoji 👁)
+local ACCENT_1 = Color3.fromRGB(255, 0, 20)
+local ACCENT_2 = Color3.fromRGB(150, 0, 12)
+local ON_COLOR = Color3.fromRGB(255, 0, 20)
+local OFF_COLOR = Color3.fromRGB(105, 25, 30)
+local WHITE = Color3.new(1, 1, 1)
+local DARK = Color3.fromRGB(7, 7, 9)
+local DIM = Color3.fromRGB(160, 170, 190)
+-- ==========================================
 
-local SAFE_POS = Vector3.new(542.93, 71.5, -405.58) -- safe area (ផ្ទះ)
-local SAFE_RADIUS = 30
-
-------------------------------------------------------------
--- Modules របស់ហ្គេម (ដូចក្នុង Sena)
-------------------------------------------------------------
-local EggState = require(RS.Client.EggState)
-local Remotes = require(RS.Shared.Remotes)
-local AreaEggs = require(RS.Shared.Types.AreaEggs)
-local Assets = require(RS.Data.Assets)
-local eggWorld = Remotes.EggWorld
-local okER, EggRecords = pcall(function() return require(RS.Shared.Util.EggRecords) end)
-
-------------------------------------------------------------
--- AUTO STEAL (Tween)
-------------------------------------------------------------
-local RARITIES = {"Common", "Uncommon", "Rare", "Epic", "Legendary", "Mythic", "Cosmic", "Secret", "Eternal", "Divine"}
-local RARITY_COLORS = {
-	Common = Color3.fromRGB(170, 175, 190),
-	Uncommon = Color3.fromRGB(90, 210, 120),
-	Rare = Color3.fromRGB(80, 160, 255),
-	Epic = Color3.fromRGB(170, 100, 255),
-	Legendary = Color3.fromRGB(255, 170, 60),
-	Mythic = Color3.fromRGB(255, 90, 90),
-	Cosmic = Color3.fromRGB(70, 220, 230),
-	Secret = Color3.fromRGB(255, 100, 190),
-	Eternal = Color3.fromRGB(255, 215, 90),
-	Divine = Color3.fromRGB(255, 245, 200),
-}
-local MODES = {
-	{name = "High Speed User Normal", desc = "Sena ground movement (per-frame, ground-safe)"},
-}
-
-local Steal = {
-	enabled = false,
-	status = "Idle",
-	target = "-",
-	carrying = false,
-	mode = "High Speed User Normal",
-	rarities = {},      -- ទទេ = យកទាំងអស់ (ល្អបំផុតមុន)
-	holdSeconds = 5,    -- ឈរលើស៊ុតមុនយក (Sena: ~5s)
-	speed = 600,        -- Sena: ค่าเริ่มต้น 600 (min 200 / max 1000)
-	vip = {Secret = true, Eternal = true, Divine = true}, -- មិនរំលង ព្យាយាមរហូត
-}
-local token = 0
-
-local function rarityOf(rec)
-	local a = Assets.Directory[rec.AssetCategory]
-	local r = a and a.Rarity
-	return r and (r.DisplayName or r._id) or "Unknown"
+-- លុប GUI ចាស់ចោលបើមាន
+local guiParent = CoreGui
+pcall(function()
+    if gethui then guiParent = gethui() end
+end)
+for _, name in ipairs({"StealAnEggUltimateFix", "OliverV3", "OliverLoading"}) do
+    local old = guiParent:FindFirstChild(name) or CoreGui:FindFirstChild(name)
+    if old then old:Destroy() end
 end
 
-local function rarityRank(rec)
-	local name = rarityOf(rec)
-	for i, n in ipairs(RARITIES) do
-		if n == name then return i end
-	end
-	return 0
-end
-
--- ទម្ងន់ស៊ុត (kg) ដូច Sena: EggRecords.WeightKgForScale(AssetCategory, AssetScale)
-local function weightOf(rec)
-	if okER and EggRecords and type(EggRecords.WeightKgForScale) == "function" then
-		local ok, r = pcall(EggRecords.WeightKgForScale, rec.AssetCategory, tonumber(rec.AssetScale) or 1)
-		if ok and type(r) == "number" then return r end
-	end
-	return 0
-end
-
-local function isVip(rec)
-	return Steal.vip[rarityOf(rec)] == true
-end
-
-local function passesFilter(rec)
-	if next(Steal.rarities) == nil then return true end
-	return Steal.rarities[rarityOf(rec)] == true
-end
-
-local function getRoot()
-	local c = player.Character
-	return c and c:FindFirstChild("HumanoidRootPart"), c and c:FindFirstChildOfClass("Humanoid")
-end
-
-local function safeTarget()
-	local params = RaycastParams.new()
-	params.FilterType = Enum.RaycastFilterType.Exclude
-	params.FilterDescendantsInstances = {player.Character}
-	local hit = workspace:Raycast(SAFE_POS + Vector3.new(0, 60, 0), Vector3.new(0, -200, 0), params)
-	if hit then
-		return Vector3.new(SAFE_POS.X, hit.Position.Y + 3.2, SAFE_POS.Z)
-	end
-	return SAFE_POS
-end
-
-local function inSafe(root)
-	local d = root.Position - SAFE_POS
-	return Vector2.new(d.X, d.Z).Magnitude <= SAFE_RADIUS and math.abs(d.Y) <= 18
-end
-
--- ការពារតួពេលផ្លាស់ទីលឿន (ដូច Sena): ជើងទ្រ hover pad មើលមិនឃើញ + KillPartIgnore + AutoRotate បិទ
-local Protect = {pad = nil, conn = nil, hb = nil, autoRotate = nil}
-
-local function ensureProtect()
-	local root, hum = getRoot()
-	if not root or not hum then return end
-	if root:GetAttribute("KillPartIgnore") ~= true then
-		root:SetAttribute("KillPartIgnore", true)
-	end
-	if Protect.autoRotate == nil then
-		Protect.autoRotate = hum.AutoRotate
-		hum.AutoRotate = false
-	end
-	if not (Protect.pad and Protect.pad.Parent) then
-		local part = Instance.new("Part")
-		part.Name = "OliverHoverPad"
-		part.Anchored = true
-		part.CanCollide = true
-		part.CanQuery = false -- កុំឱ្យ raycast របស់ safeTarget ប៉ះ
-		part.CanTouch = false
-		part.CastShadow = false
-		part.Transparency = 1
-		part.Size = Vector3.new(8, 1, 8)
-		part.Parent = workspace
-		Protect.pad = part
-	end
-	if not Protect.hb then
-		-- ដូច Sena (health pinner): កុំឱ្យតួងាប់ពេលផ្លាស់ទីលឿន (ក ដាច់ / ធ្លាក់ / ragdoll)
-		local function pin()
-			local r, h = getRoot()
-			if not r or not h then return end
-			pcall(function()
-				h.BreakJointsOnDeath = false
-				h.RequiresNeck = false
-				h:SetStateEnabled(Enum.HumanoidStateType.Dead, false)
-				h:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
-				h:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
-				if h.Health <= 0 then h.Health = math.max(h.MaxHealth, 100) end
-				if h:GetState() == Enum.HumanoidStateType.Dead then
-					h:ChangeState(Enum.HumanoidStateType.Running)
-				end
-				if r.Anchored then r.Anchored = false end
-			end)
-		end
-		pin()
-		Protect.hb = RunService.Heartbeat:Connect(pin)
-	end
-	if not Protect.conn then
-		Protect.conn = RunService.PreSimulation:Connect(function()
-			local r, h = getRoot()
-			if r and h and Protect.pad and Protect.pad.Parent then
-				local p = r.Position
-				local feet = h.HipHeight + r.Size.Y / 2
-				Protect.pad.CFrame = CFrame.new(p.X, p.Y - feet - 0.55, p.Z)
-			end
-		end)
-	end
-end
-
-local function stopProtect()
-	if Protect.conn then Protect.conn:Disconnect() Protect.conn = nil end
-	if Protect.hb then Protect.hb:Disconnect() Protect.hb = nil end
-	if Protect.pad then Protect.pad:Destroy() Protect.pad = nil end
-	local root, hum = getRoot()
-	if root then root:SetAttribute("KillPartIgnore", nil) end
-	if hum then
-		pcall(function()
-			hum.BreakJointsOnDeath = true
-			hum.RequiresNeck = true
-			hum:SetStateEnabled(Enum.HumanoidStateType.Dead, true)
-			hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, true)
-			hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, true)
-		end)
-	end
-	if hum and Protect.autoRotate ~= nil then hum.AutoRotate = Protect.autoRotate end
-	Protect.autoRotate = nil
-end
-
--- ចលនា "High Speed User Normal" ពី Sena: ផ្លាស់ទីរាល់ frame ទៅរកគោលដៅ
-local MIN_SPEED, MAX_SPEED = 200, 1000
-
-local function feetOffset(root, hum)
-	if hum.RigType == Enum.HumanoidRigType.R15 then
-		return root.Size.Y * 0.5 + math.max(hum.HipHeight, 0.5)
-	end
-	return root.Size.Y * 0.5 + 2
-end
-
-local function groundYAt(x, z, char)
-	local root = char and char:FindFirstChild("HumanoidRootPart")
-	local origin = Vector3.new(x, (root and root.Position.Y or SAFE_POS.Y) + 60, z)
-	local params = RaycastParams.new()
-	params.FilterType = Enum.RaycastFilterType.Exclude
-	params.FilterDescendantsInstances = {char}
-	params.IgnoreWater = true
-	local hit = workspace:Raycast(origin, Vector3.new(0, -300, 0), params)
-	return hit and hit.Position.Y
-end
-
-local function travel(pos, abort)
-	local speed = math.clamp(Steal.speed, MIN_SPEED, MAX_SPEED)
-	local slowUntil, lastMag, arrivedAt = 0, nil, nil
-	while true do
-		local root, hum = getRoot()
-		if not root or not hum or hum.Health <= 0 then return false end
-		if abort and abort() then return false end
-		local dt = RunService.Heartbeat:Wait()
-		root, hum = getRoot()
-		if not root or not hum then return false end
-		dt = math.max(math.min(dt, 0.15), 1 / 240)
-
-		local cur = root.Position
-		local delta = pos - cur
-		local mag = delta.Magnitude
-		local flat = Vector3.new(delta.X, 0, delta.Z)
-		local look = root.CFrame.LookVector
-		local lookFlat = Vector3.new(look.X, 0, look.Z)
-		local face = flat.Magnitude > 0.001 and flat.Unit
-			or (lookFlat.Magnitude > 0.001 and lookFlat.Unit or Vector3.new(0, 0, -1))
-
-		-- server ទាញត្រឡប់ (ចម្ងាយកើនឡើង > 2) → បន្ថយល្បឿន 0.5 វិនាទី (ដូច Sena)
-		if lastMag and mag > lastMag + 2 then
-			slowUntil = os.clock() + 0.5
-		end
-		lastMag = mag
-		local curSpeed = os.clock() < slowUntil and math.max(MIN_SPEED, speed * 0.45) or speed
-		local step = curSpeed * dt
-
-		if mag <= math.max(step, 0.05) then
-			-- ដល់ហើយ: ឈរនៅ 0.4 វិនាទី
-			root.CFrame = CFrame.lookAt(pos, pos + face)
-			root.AssemblyLinearVelocity = Vector3.zero
-			arrivedAt = arrivedAt or os.clock()
-			if os.clock() - arrivedAt >= 0.4 then return true end
-		else
-			arrivedAt = nil
-			local nextPos = cur + delta.Unit * math.min(step, mag)
-			if dt >= 1 / 30 then -- fps ទាប: កុំឱ្យធ្លាក់ក្រោមដី
-				local gy = groundYAt(nextPos.X, nextPos.Z, player.Character)
-				if gy then
-					local minY = gy + feetOffset(root, hum)
-					if nextPos.Y < minY then
-						nextPos = Vector3.new(nextPos.X, minY, nextPos.Z)
-					end
-				end
-			end
-			root.CFrame = CFrame.lookAt(nextPos, nextPos + face)
-			root.AssemblyLinearVelocity = Vector3.zero
-		end
-	end
-end
-
-local function wallSealed()
-	local ok, res = pcall(function()
-		return require(RS.Client.AreaEggResetWall).IsSealed()
-	end)
-	return ok and res == true
-end
-
-local function readRecords()
-	local ok, snap = pcall(EggState.ReadFieldEggs)
-	if ok and snap then return snap.Records or {} end
-	return {}
-end
-
-local function myCarriedEgg()
-	for _, rec in ipairs(readRecords()) do
-		if rec.State == AreaEggs.States.Carried and rec.CarrierUserId == player.UserId then
-			return rec
-		end
-	end
-end
-
-local function findByUid(uid)
-	for _, rec in ipairs(readRecords()) do
-		if rec.Uid == uid then return rec end
-	end
-end
-
-local function eggPos(rec)
-	local cf = rec.BottomCFrame or rec.BoundsCFrame
-	return cf and cf.Position
-end
-
--- ជ្រើសស៊ុត: rarity ខ្ពស់បំផុតមុន → បើ rarity ដូចគ្នា យកអា kg ច្រើនជាង → បើ kg ដូចគ្នា យកអាជិតជាង
-local function pickTarget(skip)
-	local root = getRoot()
-	if not root then return nil end
-	local best, bestRank, bestW, bestDist
-	for _, rec in ipairs(readRecords()) do
-		if (rec.State == AreaEggs.States.Slot or rec.State == AreaEggs.States.Dropped)
-		and passesFilter(rec) and (isVip(rec) or not skip[rec.Uid]) then
-			local pos = eggPos(rec)
-			if pos then
-				local rank = rarityRank(rec)
-				local w = weightOf(rec)
-				local d = (pos - root.Position).Magnitude
-				local better = not best
-					or rank > bestRank
-					or (rank == bestRank and w > bestW + 1e-6)
-					or (rank == bestRank and math.abs(w - bestW) <= 1e-6 and d < bestDist)
-				if better then
-					best, bestRank, bestW, bestDist = rec, rank, w, d
-				end
-			end
-		end
-	end
-	return best
-end
-
-local function stealLoop(myToken)
-	local lastUid
-	local skip = {}
-	local function stopped() return not Steal.enabled or token ~= myToken end
-
-	while not stopped() do
-		local root, hum = getRoot()
-		if not root or not hum or hum.Health <= 0 then
-			Steal.status = "Waiting for character"
-			task.wait(1)
-		else
-			ensureProtect()
-			local carried = myCarriedEgg()
-			Steal.carrying = carried ~= nil
-
-			if carried then
-				-- ដឹកទៅ safe area ហើយឈរចាំ server ទទួលស៊ុត
-				lastUid = carried.Uid
-				Steal.status = "Delivering egg"
-				if not inSafe(root) then
-					travel(safeTarget(), function() return stopped() or not myCarriedEgg() end)
-				else
-					Steal.status = "Waiting for deposit"
-					root.CFrame = CFrame.new(safeTarget()) * (root.CFrame - root.CFrame.Position)
-					root.AssemblyLinearVelocity = Vector3.zero
-					task.wait(0.1)
-				end
-			elseif wallSealed() then
-				Steal.status = "Egg reset - waiting"
-				task.wait(0.5)
-			else
-				local target
-				-- ស៊ុតទើបធ្លាក់ ត្រូវរើសវិញមុនគេ
-				if lastUid then
-					local rec = findByUid(lastUid)
-					if rec and rec.State == AreaEggs.States.Dropped then
-						target = rec
-						Steal.status = "Egg dropped - re-grabbing"
-					else
-						lastUid = nil
-					end
-				end
-				target = target or pickTarget(skip)
-
-				if not target then
-					skip = {}
-					Steal.target = "-"
-					Steal.status = "No egg found"
-					task.wait(1)
-				else
-					local rname = rarityOf(target)
-					local wtxt = string.format("%s %.1fkg", rname, weightOf(target))
-					Steal.target = wtxt
-					Steal.status = "Going to " .. wtxt
-					local pos = eggPos(target)
-					local arrived = pos and travel(pos + Vector3.new(0, 3, 0), function()
-						if stopped() then return true end
-						local r = findByUid(target.Uid)
-						return not r or (r.State ~= AreaEggs.States.Slot and r.State ~= AreaEggs.States.Dropped)
-					end)
-
-					if arrived and not stopped() then
-						-- ឈរជាប់លើស៊ុតមួយរយៈ ទើប server ឱ្យយក
-						local holdPos = pos + Vector3.new(0, 3, 0)
-						local holdUntil = os.clock() + Steal.holdSeconds
-						local lost = false
-						while os.clock() < holdUntil and not stopped() do
-							Steal.status = string.format("Securing %s (%.1fs)", rname, holdUntil - os.clock())
-							local r = findByUid(target.Uid)
-							if not r or (r.State ~= AreaEggs.States.Slot and r.State ~= AreaEggs.States.Dropped) then
-								lost = true
-								break
-							end
-							local rt = getRoot()
-							if rt then
-								rt.CFrame = CFrame.new(holdPos)
-								rt.AssemblyLinearVelocity = Vector3.zero
-							end
-							task.wait(0.1)
-						end
-
-						if not lost and not stopped() then
-							Steal.status = "Grabbing " .. rname
-							local untilAt = os.clock() + 3
-							while os.clock() < untilAt and not stopped() and not myCarriedEgg() do
-								pcall(function()
-									eggWorld.AskFieldEggCarry:InvokeServer({Uid = target.Uid})
-								end)
-								task.wait(0.3)
-							end
-							if myCarriedEgg() then
-								lastUid = target.Uid
-							elseif isVip(target) then
-								Steal.status = "Retrying " .. rname
-								task.wait(0.3)
-							else
-								skip[target.Uid] = true
-							end
-						end
-					end
-				end
-			end
-		end
-		task.wait()
-	end
-	if token == myToken or not Steal.enabled then stopProtect() end
-	Steal.status = "Idle"
-	Steal.target = "-"
-	Steal.carrying = false
-end
-
-function Steal.set(on)
-	Steal.enabled = on
-	token += 1
-	if on then
-		local t = token
-		task.spawn(stealLoop, t)
-	end
-end
-
-------------------------------------------------------------
--- UI
-------------------------------------------------------------
-local BG = Color3.fromRGB(16, 17, 24)
-local BG2 = Color3.fromRGB(22, 23, 32)
-local PANEL = Color3.fromRGB(30, 32, 44)
-local PANEL2 = Color3.fromRGB(40, 43, 58)
-local STROKE = Color3.fromRGB(52, 55, 74)
-local TEXT = Color3.fromRGB(235, 237, 245)
-local MUTED = Color3.fromRGB(140, 146, 170)
-local GREEN = Color3.fromRGB(60, 200, 120)
+-- ============ Helpers ============
+local NSK, CSK = NumberSequenceKeypoint.new, ColorSequenceKeypoint.new
 
 local function new(class, props, parent)
-	local o = Instance.new(class)
-	for k, v in pairs(props or {}) do o[k] = v end
-	o.Parent = parent
-	return o
-end
-local function corner(o, r) return new("UICorner", {CornerRadius = UDim.new(0, r)}, o) end
-local function stroke(o, c, t)
-	return new("UIStroke", {Color = c, Thickness = t or 1, ApplyStrokeMode = Enum.ApplyStrokeMode.Border}, o)
-end
-local function pad(o, l, t, r, b)
-	return new("UIPadding", {
-		PaddingLeft = UDim.new(0, l), PaddingTop = UDim.new(0, t),
-		PaddingRight = UDim.new(0, r), PaddingBottom = UDim.new(0, b),
-	}, o)
-end
-local function label(parent, text, size, color, font, xalign)
-	return new("TextLabel", {
-		BackgroundTransparency = 1, Text = text, TextSize = size, TextColor3 = color or TEXT,
-		Font = font or Enum.Font.Gotham, TextXAlignment = xalign or Enum.TextXAlignment.Left,
-	}, parent)
-end
-local function tween(o, t, props)
-	TweenService:Create(o, TweenInfo.new(t, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), props):Play()
+    local o = Instance.new(class)
+    for k, v in pairs(props) do o[k] = v end
+    o.Parent = parent
+    return o
 end
 
-local function makeDraggable(handle, target)
-	local dragging, dragStart, startPos
-	local moved = false
-	handle.InputBegan:Connect(function(input)
-		if input.UserInputType == Enum.UserInputType.MouseButton1
-		or input.UserInputType == Enum.UserInputType.Touch then
-			dragging = true
-			moved = false
-			dragStart = input.Position
-			startPos = target.Position
-			input.Changed:Connect(function()
-				if input.UserInputState == Enum.UserInputState.End then dragging = false end
-			end)
-		end
-	end)
-	UIS.InputChanged:Connect(function(input)
-		if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement
-		or input.UserInputType == Enum.UserInputType.Touch) then
-			local d = input.Position - dragStart
-			if d.Magnitude > 5 then moved = true end
-			target.Position = UDim2.new(
-				startPos.X.Scale, startPos.X.Offset + d.X,
-				startPos.Y.Scale, startPos.Y.Offset + d.Y
-			)
-		end
-	end)
-	return function() return moved end
+local function corner(parent, radius)
+    return new("UICorner", {CornerRadius = radius}, parent)
 end
 
-local parentGui = player:WaitForChild("PlayerGui")
-local old = parentGui:FindFirstChild("OliverAutoSteal")
-if old then old:Destroy() end
+local function stroke(parent, color, thickness, transparency)
+    return new("UIStroke", {Color = color, Thickness = thickness or 1, Transparency = transparency or 0,
+        ApplyStrokeMode = Enum.ApplyStrokeMode.Border}, parent)
+end
 
-local gui = new("ScreenGui", {
-	Name = "OliverAutoSteal", ResetOnSpawn = false, ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
-}, parentGui)
+local function gradient(parent, c1, c2, rotation)
+    return new("UIGradient", {Color = ColorSequence.new(c1, c2), Rotation = rotation or 45}, parent)
+end
 
--- Window
-local main = new("Frame", {
-	Size = UDim2.fromOffset(420, 260), Position = UDim2.new(0.5, -210, 0.5, -130),
-	BackgroundColor3 = BG, ClipsDescendants = true,
-}, gui)
-corner(main, 14)
-stroke(main, STROKE, 1)
-local scale = new("UIScale", {Scale = 1}, main)
+local function tween(obj, time, props, style, dir)
+    TweenService:Create(obj, TweenInfo.new(time, style or Enum.EasingStyle.Quad, dir or Enum.EasingDirection.Out), props):Play()
+end
+
+local function label(parent, str, size, font, color, pos, sz, align)
+    return new("TextLabel", {Size = sz, Position = pos, BackgroundTransparency = 1, Text = str, TextColor3 = color,
+        Font = font, TextSize = size, TextXAlignment = align or Enum.TextXAlignment.Left}, parent)
+end
+
+-- ============ Logo ស៊ុមចំណាំងផ្លាត (ស៊ុមតែលើ Logo ប៉ុណ្ណោះ មិនមែន UI) ============
+local shines, rims = {}, {}
+
+local function makeLogo(parent, size, position, thickness)
+    thickness = thickness or 3
+
+    -- ស៊ុមក្រៅ: ពណ៌ភ្លឺវិលជុំវិញ
+    local ring = new("Frame", {Name = "LogoFrame", Size = size, Position = position or UDim2.new(),
+        BackgroundColor3 = WHITE, BorderSizePixel = 0, Active = false}, parent)
+    corner(ring, UDim.new(1, 0))
+    table.insert(rims, new("UIGradient", {Color = ColorSequence.new({
+        CSK(0, ACCENT_1), CSK(0.25, ACCENT_2), CSK(0.5, WHITE), CSK(0.75, ACCENT_2), CSK(1, ACCENT_1),
+    })}, ring))
+
+    -- គម្លាតងងឹតរវាងស៊ុម និង Logo
+    local gap = new("Frame", {Size = UDim2.new(1, -thickness * 2, 1, -thickness * 2),
+        Position = UDim2.fromOffset(thickness, thickness), BackgroundColor3 = DARK, BorderSizePixel = 0,
+        Active = false}, ring)
+    corner(gap, UDim.new(1, 0))
+
+    -- Logo ខាងក្នុង
+    local inset = thickness + 2
+    local innerSize = UDim2.new(1, -inset * 2, 1, -inset * 2)
+    local innerPos = UDim2.fromOffset(inset, inset)
+    if LOGO_IMAGE ~= "" then
+        local img = new("ImageLabel", {Size = innerSize, Position = innerPos, BackgroundTransparency = 1,
+            Image = LOGO_IMAGE, ScaleType = Enum.ScaleType.Crop}, ring)
+        corner(img, UDim.new(1, 0))
+    else
+        local fill = new("Frame", {Size = innerSize, Position = innerPos, BackgroundColor3 = WHITE,
+            BorderSizePixel = 0}, ring)
+        corner(fill, UDim.new(1, 0))
+        gradient(fill, ACCENT_1, ACCENT_2, 45)
+        new("TextLabel", {Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, Text = "O",
+            TextColor3 = WHITE, Font = Enum.Font.GothamBlack, TextScaled = true}, fill)
+        new("UIPadding", {PaddingTop = UDim.new(0.2, 0), PaddingBottom = UDim.new(0.2, 0)}, fill)
+    end
+
+    -- ពន្លឺកញ្ចក់ពាក់កណ្ដាលខាងលើ
+    local gloss = new("Frame", {Size = UDim2.fromScale(1, 1), BackgroundColor3 = WHITE, BorderSizePixel = 0,
+        ZIndex = 5, Active = false}, ring)
+    corner(gloss, UDim.new(1, 0))
+    new("UIGradient", {Rotation = 90, Transparency = NumberSequence.new({NSK(0, 0.78), NSK(0.5, 1), NSK(1, 1)})}, gloss)
+
+    -- ជួរពន្លឺរំកិលកាត់
+    local shine = new("Frame", {Size = UDim2.fromScale(1, 1), BackgroundColor3 = WHITE, BorderSizePixel = 0,
+        ZIndex = 6, Active = false}, ring)
+    corner(shine, UDim.new(1, 0))
+    table.insert(shines, new("UIGradient", {Rotation = 25, Transparency = NumberSequence.new({
+        NSK(0, 1), NSK(0.4, 1), NSK(0.5, 0.45), NSK(0.6, 1), NSK(1, 1),
+    })}, shine))
+
+    return ring
+end
+
+RunService.RenderStepped:Connect(function(dt)
+    local p = (os.clock() % 3.2) / 3.2
+    local x = p < 0.45 and (-1 + p / 0.45 * 2) or 1
+    for _, g in ipairs(shines) do g.Offset = Vector2.new(x, 0) end
+    for _, g in ipairs(rims) do g.Rotation = (g.Rotation + dt * 80) % 360 end
+end)
+
+local ScreenGui = new("ScreenGui", {Name = "OliverV3", ResetOnSpawn = false,
+    ZIndexBehavior = Enum.ZIndexBehavior.Sibling}, guiParent)
+
+-- ============ Floating Button ============
+local FloatButton = new("ImageButton", {Name = "FloatButton", Size = UDim2.fromOffset(60, 60),
+    Position = UDim2.fromScale(0.1, 0.1), BackgroundTransparency = 1, AutoButtonColor = false, Image = ""}, ScreenGui)
+makeLogo(FloatButton, UDim2.fromScale(1, 1), nil, 3)
+
+-- ============ OLIVER RED / BLACK UI ============
+local MainFrame = new("CanvasGroup", {
+    Name = "MainFrame",
+    Size = UDim2.fromOffset(620, 360),
+    AnchorPoint = Vector2.new(0.5, 0.5),
+    Position = UDim2.new(0.5, 0, 0.5, 0),
+    GroupTransparency = 1,
+    BackgroundColor3 = Color3.fromRGB(5, 5, 7),
+    BorderSizePixel = 0,
+    Visible = false,
+    Active = true,
+}, ScreenGui)
+local camera = Workspace.CurrentCamera
+local viewport = camera and camera.ViewportSize or Vector2.new(800, 600)
+local fitScale = math.min(1, viewport.X / 650, viewport.Y / 390)
+local menuScale = new("UIScale", {Scale = fitScale * 0.8}, MainFrame)
+local openMenu, closeMenu, toggleMenu
+corner(MainFrame, UDim.new(0, 18))
+stroke(MainFrame, Color3.fromRGB(255, 0, 20), 2, 0)
+
+local Bg = new("Frame", {
+    Name = "Bg", Size = UDim2.fromScale(1, 1),
+    BackgroundColor3 = Color3.fromRGB(5, 5, 7),
+    BorderSizePixel = 0, Active = false, ZIndex = 0,
+}, MainFrame)
+corner(Bg, UDim.new(0, 18))
+gradient(Bg, Color3.fromRGB(16, 4, 6), Color3.fromRGB(3, 3, 5), 35)
 
 -- Header
-local header = new("Frame", {Size = UDim2.new(1, 0, 0, 40), BackgroundColor3 = BG2}, main)
-corner(header, 14)
-new("Frame", {Size = UDim2.new(1, 0, 0, 14), Position = UDim2.new(0, 0, 1, -14), BackgroundColor3 = BG2, BorderSizePixel = 0}, header)
-local titleLbl = label(header, TITLE, 17, ACCENT, Enum.Font.GothamBold)
-titleLbl.Size = UDim2.new(0.5, 0, 1, 0)
-titleLbl.Position = UDim2.fromOffset(14, 0)
-local verLbl = label(header, VERSION, 13, MUTED, Enum.Font.GothamBold, Enum.TextXAlignment.Right)
-verLbl.Size = UDim2.fromOffset(40, 40)
-verLbl.Position = UDim2.new(1, -86, 0, 0)
-new("Frame", {Size = UDim2.new(1, 0, 0, 1), Position = UDim2.new(0, 0, 1, -1), BackgroundColor3 = STROKE, BorderSizePixel = 0}, header)
+local Header = new("Frame", {
+    Name = "Header", Size = UDim2.new(1, 0, 0, 76),
+    BackgroundColor3 = Color3.fromRGB(10, 5, 7),
+    BackgroundTransparency = 0.05, BorderSizePixel = 0,
+}, MainFrame)
+corner(Header, UDim.new(0, 18))
+makeLogo(Header, UDim2.fromOffset(54, 54), UDim2.fromOffset(18, 10), 3)
 
-local closeBtn = new("TextButton", {
-	Size = UDim2.fromOffset(28, 28), Position = UDim2.new(1, -36, 0, 6),
-	BackgroundColor3 = PANEL, Text = "✕", TextColor3 = MUTED, TextSize = 14,
-	Font = Enum.Font.GothamBold, AutoButtonColor = false,
-}, header)
-corner(closeBtn, 8)
-makeDraggable(header, main)
+local Title = label(Header, "OLIVER", 26, Enum.Font.GothamBlack,
+    Color3.fromRGB(255, 20, 30), UDim2.fromOffset(82, 13), UDim2.fromOffset(150, 28))
+local SubTitle = label(Header, "DELTA EXECUTOR", 13, Enum.Font.GothamBold,
+    WHITE, UDim2.fromOffset(245, 18), UDim2.fromOffset(180, 20))
+label(Header, "SCRIPT HUB  •  PLAY DIFFERENT", 10, Enum.Font.Gotham,
+    DIM, UDim2.fromOffset(246, 40), UDim2.fromOffset(210, 16))
 
--- Tab rail
-local body = new("Frame", {Size = UDim2.new(1, 0, 1, -40), Position = UDim2.fromOffset(0, 40), BackgroundTransparency = 1}, main)
-local rail = new("Frame", {Size = UDim2.new(0, 122, 1, 0), BackgroundTransparency = 1, BorderSizePixel = 0}, body)
-pad(rail, 8, 10, 8, 8)
-new("UIListLayout", {Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder}, rail)
+local MinBtn = new("TextButton", {
+    Size = UDim2.fromOffset(30, 30), Position = UDim2.new(1, -78, 0, 22),
+    BackgroundTransparency = 1, Text = "—", TextColor3 = Color3.fromRGB(255, 0, 20),
+    Font = Enum.Font.GothamBold, TextSize = 24, AutoButtonColor = false,
+}, Header)
+local CloseBtn = new("TextButton", {
+    Size = UDim2.fromOffset(30, 30), Position = UDim2.new(1, -42, 0, 22),
+    BackgroundTransparency = 1, Text = "×", TextColor3 = Color3.fromRGB(255, 0, 20),
+    Font = Enum.Font.GothamBold, TextSize = 28, AutoButtonColor = false,
+}, Header)
+CloseBtn.MouseButton1Click:Connect(function() closeMenu() end)
 
-new("Frame", {Size = UDim2.new(0, 1, 1, 0), Position = UDim2.fromOffset(121, 0), BackgroundColor3 = STROKE, BorderSizePixel = 0}, body)
-local pagesHolder = new("Frame", {Size = UDim2.new(1, -122, 1, 0), Position = UDim2.fromOffset(122, 0), BackgroundTransparency = 1}, body)
+local HeaderLine = new("Frame", {
+    Size = UDim2.new(1, -2, 0, 2), Position = UDim2.new(0, 1, 0, 75),
+    BackgroundColor3 = Color3.fromRGB(255, 0, 20), BorderSizePixel = 0,
+}, MainFrame)
 
-local tabs = {}
-local function selectTab(name)
-	for n, t in pairs(tabs) do
-		local on = n == name
-		t.page.Visible = on
-		tween(t.btn, 0.15, {BackgroundTransparency = on and 0 or 1, BackgroundColor3 = on and PANEL2 or PANEL})
-		t.btn.TextColor3 = on and TEXT or MUTED
-		t.bar.Visible = on
-	end
+-- Sidebar: only one tab, Main
+local Sidebar = new("Frame", {
+    Name = "Sidebar", Size = UDim2.new(0, 150, 1, -78),
+    Position = UDim2.fromOffset(0, 78),
+    BackgroundColor3 = Color3.fromRGB(8, 5, 7), BorderSizePixel = 0,
+}, MainFrame)
+local MainTab = new("TextButton", {
+    Name = "MainTab", Size = UDim2.new(1, -20, 0, 48),
+    Position = UDim2.fromOffset(10, 20),
+    BackgroundColor3 = Color3.fromRGB(75, 0, 10),
+    Text = "⌂   Main", TextColor3 = WHITE,
+    Font = Enum.Font.GothamBold, TextSize = 16, AutoButtonColor = false,
+}, Sidebar)
+corner(MainTab, UDim.new(0, 10))
+stroke(MainTab, Color3.fromRGB(255, 0, 20), 1.5, 0.1)
+gradient(MainTab, Color3.fromRGB(100, 0, 12), Color3.fromRGB(35, 0, 5), 0)
+
+local SideCaption = label(Sidebar, "OLIVER SCRIPT", 13, Enum.Font.GothamBold,
+    Color3.fromRGB(255, 20, 30), UDim2.new(0, 15, 1, -48), UDim2.new(1, -25, 0, 20))
+label(Sidebar, "PLAY DIFFERENT", 10, Enum.Font.Gotham,
+    DIM, UDim2.new(0, 15, 1, -28), UDim2.new(1, -25, 0, 16))
+
+local SideDivider = new("Frame", {
+    Size = UDim2.new(0, 1, 1, -78), Position = UDim2.new(0, 150, 0, 78),
+    BackgroundColor3 = Color3.fromRGB(80, 15, 20), BorderSizePixel = 0,
+}, MainFrame)
+
+-- Main page content
+local Content = new("Frame", {
+    Name = "MainPage", Size = UDim2.new(1, -170, 1, -100),
+    Position = UDim2.fromOffset(170, 96),
+    BackgroundTransparency = 1, BorderSizePixel = 0,
+}, MainFrame)
+local PageTitle = label(Content, "Main", 28, Enum.Font.GothamBlack, WHITE,
+    UDim2.fromOffset(8, 0), UDim2.new(1, -16, 0, 36))
+label(Content, "Open main features", 13, Enum.Font.Gotham,
+    DIM, UDim2.fromOffset(9, 36), UDim2.new(1, -18, 0, 20))
+
+-- Anti Guard card (the only function shown on Main)
+local AntiGuardButton = new("TextButton", {
+    Name = "AntiGuardCard", Size = UDim2.new(1, -8, 0, 88),
+    Position = UDim2.fromOffset(4, 76),
+    BackgroundColor3 = Color3.fromRGB(13, 8, 10),
+    Text = "", AutoButtonColor = false,
+}, Content)
+corner(AntiGuardButton, UDim.new(0, 14))
+local AntiStroke = stroke(AntiGuardButton, Color3.fromRGB(255, 0, 20), 1.5, 0.1)
+
+local IconBox = new("Frame", {
+    Size = UDim2.fromOffset(54, 54), Position = UDim2.new(0, 14, 0.5, -27),
+    BackgroundColor3 = Color3.fromRGB(35, 0, 5), BorderSizePixel = 0,
+}, AntiGuardButton)
+corner(IconBox, UDim.new(0, 12))
+stroke(IconBox, Color3.fromRGB(255, 0, 20), 1.5, 0)
+local iconAsset = tostring(ICON_ANTIGUARD or "")
+if iconAsset:match("^%d+$") then iconAsset = "rbxassetid://" .. iconAsset end
+if iconAsset ~= "" then
+    new("ImageLabel", {
+        Size = UDim2.new(1, -12, 1, -12), Position = UDim2.fromOffset(6, 6),
+        BackgroundTransparency = 1, Image = iconAsset, ScaleType = Enum.ScaleType.Fit,
+    }, IconBox)
+else
+    new("TextLabel", {
+        Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1,
+        Text = "🛡", TextSize = 27, Font = Enum.Font.GothamBold,
+        TextColor3 = Color3.fromRGB(255, 0, 20),
+    }, IconBox)
 end
-local function addTab(name, glyph, order)
-	local btn = new("TextButton", {
-		Size = UDim2.new(1, 0, 0, 34), BackgroundColor3 = PANEL, BackgroundTransparency = 1,
-		Text = "  " .. glyph .. "  " .. name, TextColor3 = MUTED, TextSize = 12,
-		Font = Enum.Font.GothamMedium, TextXAlignment = Enum.TextXAlignment.Left,
-		AutoButtonColor = false, LayoutOrder = order, TextTruncate = Enum.TextTruncate.AtEnd,
-	}, rail)
-	corner(btn, 8)
-	local bar = new("Frame", {Size = UDim2.new(0, 3, 0, 18), Position = UDim2.new(0, 0, 0.5, -9), BackgroundColor3 = ACCENT, Visible = false}, btn)
-	corner(bar, 2)
-	local page = new("ScrollingFrame", {
-		Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, BorderSizePixel = 0,
-		ScrollBarThickness = 3, ScrollBarImageColor3 = STROKE, CanvasSize = UDim2.new(),
-		AutomaticCanvasSize = Enum.AutomaticSize.Y, Visible = false,
-	}, pagesHolder)
-	pad(page, 10, 10, 12, 10)
-	new("UIListLayout", {Padding = UDim.new(0, 8), SortOrder = Enum.SortOrder.LayoutOrder}, page)
-	tabs[name] = {btn = btn, page = page, bar = bar}
-	btn.MouseButton1Click:Connect(function() selectTab(name) end)
-	return page
+
+label(AntiGuardButton, "Anti Guard", 17, Enum.Font.GothamBold, WHITE,
+    UDim2.fromOffset(82, 19), UDim2.new(1, -250, 0, 25))
+label(AntiGuardButton, "Anti Hit protection toggle", 12, Enum.Font.Gotham,
+    DIM, UDim2.fromOffset(82, 47), UDim2.new(1, -250, 0, 20))
+
+local Toggle = new("Frame", {
+    Name = "Toggle", Size = UDim2.fromOffset(104, 36),
+    Position = UDim2.new(1, -118, 0.5, -18),
+    BackgroundColor3 = Color3.fromRGB(40, 10, 14), BorderSizePixel = 0,
+}, AntiGuardButton)
+corner(Toggle, UDim.new(1, 0))
+stroke(Toggle, Color3.fromRGB(255, 0, 20), 1.2, 0)
+local OffText = label(Toggle, "OFF", 12, Enum.Font.GothamBold, DIM,
+    UDim2.fromOffset(10, 0), UDim2.fromOffset(30, 36), Enum.TextXAlignment.Center)
+local OnText = label(Toggle, "ON", 12, Enum.Font.GothamBold, Color3.fromRGB(255, 0, 20),
+    UDim2.new(1, -36, 0, 0), UDim2.fromOffset(30, 36), Enum.TextXAlignment.Center)
+local Knob = new("Frame", {
+    Size = UDim2.fromOffset(24, 24), Position = UDim2.new(0, 6, 0.5, -12),
+    BackgroundColor3 = Color3.fromRGB(220, 220, 225), BorderSizePixel = 0,
+}, Toggle)
+corner(Knob, UDim.new(1, 0))
+
+local StatusDot = new("Frame", {
+    Size = UDim2.fromOffset(7, 7), Position = UDim2.new(0, 8, 1, -22),
+    BackgroundColor3 = OFF_COLOR, BorderSizePixel = 0,
+}, Content)
+corner(StatusDot, UDim.new(1, 0))
+local Status = label(Content, "Status: OFF", 11, Enum.Font.Gotham,
+    DIM, UDim2.new(0, 22, 1, -28), UDim2.new(1, -30, 0, 18))
+
+local AntiGuardCard = {Button = AntiGuardButton}
+local antiGuardVisualOn = false
+function AntiGuardCard.Set(on)
+    antiGuardVisualOn = on
+    tween(Knob, 0.18, {
+        Position = on and UDim2.new(1, -30, 0.5, -12) or UDim2.new(0, 6, 0.5, -12)
+    }, Enum.EasingStyle.Back)
+    tween(Toggle, 0.18, {
+        BackgroundColor3 = on and Color3.fromRGB(120, 0, 15) or Color3.fromRGB(40, 10, 14)
+    })
+    tween(AntiStroke, 0.18, {
+        Color = on and Color3.fromRGB(255, 0, 20) or Color3.fromRGB(110, 25, 30),
+        Transparency = on and 0 or 0.2
+    })
+    tween(StatusDot, 0.18, {BackgroundColor3 = on and Color3.fromRGB(255, 0, 20) or OFF_COLOR})
+    OffText.TextColor3 = on and DIM or WHITE
+    OnText.TextColor3 = on and Color3.fromRGB(255, 0, 20) or DIM
 end
 
-local stealPage = addTab("Main", "◆", 1)
-local settingsPage = addTab("Settings Config", "⚙", 2)
-
--- Collapsible card (↑ = ปิด / ↓ = เปิด)
-local function makeSection(parent, title, order, startOpen)
-	local card = new("Frame", {
-		Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y,
-		BackgroundColor3 = PANEL, LayoutOrder = order,
-	}, parent)
-	corner(card, 10)
-	stroke(card, STROKE, 1)
-	new("UIListLayout", {SortOrder = Enum.SortOrder.LayoutOrder}, card)
-
-	local head = new("TextButton", {
-		Size = UDim2.new(1, 0, 0, 38), BackgroundTransparency = 1, Text = "", AutoButtonColor = false, LayoutOrder = 1,
-	}, card)
-	local t = label(head, title, 14, TEXT, Enum.Font.GothamBold)
-	t.Size = UDim2.new(1, -50, 1, 0)
-	t.Position = UDim2.fromOffset(12, 0)
-	local arrow = label(head, startOpen and "↓" or "↑", 18, ACCENT, Enum.Font.GothamBold, Enum.TextXAlignment.Center)
-	arrow.Size = UDim2.fromOffset(30, 38)
-	arrow.Position = UDim2.new(1, -38, 0, 0)
-
-	local content = new("Frame", {
-		Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y,
-		BackgroundTransparency = 1, Visible = startOpen, LayoutOrder = 2,
-	}, card)
-	pad(content, 10, 0, 10, 10)
-	new("UIListLayout", {Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder}, content)
-
-	head.MouseButton1Click:Connect(function()
-		content.Visible = not content.Visible
-		arrow.Text = content.Visible and "↓" or "↑"
-	end)
-	return content
-end
-
--- Auto Steal switch card
-local toggleCard = new("Frame", {Size = UDim2.new(1, 0, 0, 56), BackgroundColor3 = PANEL, LayoutOrder = 0}, stealPage)
-corner(toggleCard, 10)
-local toggleStroke = stroke(toggleCard, STROKE, 1)
-local toggleTitle = label(toggleCard, "Auto Steal", 16, TEXT, Enum.Font.GothamBold)
-toggleTitle.Size = UDim2.new(1, -80, 0, 22)
-toggleTitle.Position = UDim2.fromOffset(14, 8)
-local toggleSub = label(toggleCard, "Idle", 11, MUTED)
-toggleSub.Size = UDim2.new(1, -80, 0, 16)
-toggleSub.Position = UDim2.fromOffset(14, 31)
-toggleSub.TextTruncate = Enum.TextTruncate.AtEnd
-
-local pill = new("Frame", {Size = UDim2.fromOffset(46, 24), Position = UDim2.new(1, -60, 0.5, -12), BackgroundColor3 = PANEL2}, toggleCard)
-corner(pill, 12)
-local knob = new("Frame", {Size = UDim2.fromOffset(18, 18), Position = UDim2.fromOffset(3, 3), BackgroundColor3 = TEXT}, pill)
-corner(knob, 9)
-local toggleBtn = new("TextButton", {Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, Text = "", ZIndex = 5}, toggleCard)
-
-local function renderToggle(on)
-	tween(pill, 0.15, {BackgroundColor3 = on and GREEN or PANEL2})
-	tween(knob, 0.15, {Position = on and UDim2.fromOffset(25, 3) or UDim2.fromOffset(3, 3)})
-	tween(toggleStroke, 0.15, {Color = on and GREEN or STROKE})
-end
-toggleBtn.MouseButton1Click:Connect(function()
-	Steal.set(not Steal.enabled)
-	renderToggle(Steal.enabled)
+MinBtn.MouseButton1Click:Connect(function()
+    if menuOpen then closeMenu() end
 end)
 
--- Filters / Rarity
-local filters = makeSection(stealPage, "Filters / Rarity", 1, false)
-local hintRow = new("Frame", {Size = UDim2.new(1, 0, 0, 22), BackgroundTransparency = 1, LayoutOrder = 1}, filters)
-local hint = label(hintRow, "Highest rarity first, then heaviest kg", 11, MUTED)
-hint.Size = UDim2.new(1, -60, 1, 0)
-local clearBtn = new("TextButton", {
-	Size = UDim2.fromOffset(52, 22), Position = UDim2.new(1, -52, 0, 0), BackgroundColor3 = PANEL2,
-	Text = "Clear", TextColor3 = TEXT, TextSize = 11, Font = Enum.Font.GothamMedium, AutoButtonColor = false,
-}, hintRow)
-corner(clearBtn, 6)
+-- ===== Smooth Drag =====
+local function makeDraggable(guiObject)
+    local dragging, dragInput, dragStart, startPos = false, nil, nil, nil
+    local targetPos = guiObject.Position
+    local state = {moved = false}
 
-local grid = new("Frame", {Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1, LayoutOrder = 2}, filters)
-new("UIGridLayout", {CellSize = UDim2.new(1 / 3, -5, 0, 28), CellPadding = UDim2.fromOffset(6, 6), SortOrder = Enum.SortOrder.LayoutOrder}, grid)
+    guiObject.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            state.moved = false
+            dragInput = input
+            dragStart = input.Position
+            startPos = guiObject.Position
+            targetPos = guiObject.Position
 
-local chips = {}
-local function renderChip(name)
-	local c = chips[name]
-	local on = Steal.rarities[name] == true
-	local col = RARITY_COLORS[name]
-	tween(c.btn, 0.12, {BackgroundColor3 = on and col or PANEL2})
-	c.btn.TextColor3 = on and Color3.fromRGB(20, 20, 28) or col
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then
+                    dragging = false
+                    dragInput = nil
+                end
+            end)
+        end
+    end)
+
+    UserInputService.InputChanged:Connect(function(input)
+        if dragging and (input == dragInput
+            or input.UserInputType == Enum.UserInputType.MouseMovement) then
+            dragInput = input
+        end
+    end)
+
+    RunService.RenderStepped:Connect(function(dt)
+        if dragging and dragInput then
+            local delta = dragInput.Position - dragStart
+            if not state.moved and delta.Magnitude > 6 then
+                state.moved = true
+                dragStart = dragInput.Position
+                startPos = guiObject.Position
+                delta = Vector3.new(0, 0, 0)
+            end
+            if state.moved then
+                targetPos = UDim2.new(
+                    startPos.X.Scale,
+                    startPos.X.Offset + delta.X,
+                    startPos.Y.Scale,
+                    startPos.Y.Offset + delta.Y
+                )
+            end
+        end
+        local alpha = 1 - math.exp(-dt * 30)
+        guiObject.Position = guiObject.Position:Lerp(targetPos, alpha)
+    end)
+
+    return state
 end
-for i, name in ipairs(RARITIES) do
-	local b = new("TextButton", {
-		BackgroundColor3 = PANEL2, Text = name, TextSize = 12, Font = Enum.Font.GothamMedium,
-		TextColor3 = RARITY_COLORS[name], AutoButtonColor = false, LayoutOrder = i,
-	}, grid)
-	corner(b, 7)
-	chips[name] = {btn = b}
-	b.MouseButton1Click:Connect(function()
-		Steal.rarities[name] = (not Steal.rarities[name]) or nil
-		renderChip(name)
-	end)
+
+local floatDrag = makeDraggable(FloatButton)
+makeDraggable(MainFrame)
+
+-- ===== Animation បើក/បិទម៉ឺនុយ =====
+local menuOpen = false
+local menuToken = 0
+local openInfo = TweenInfo.new(0.35, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
+local closeInfo = TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
+
+openMenu = function()
+    menuOpen = true
+    menuToken += 1
+    MainFrame.Visible = true
+    TweenService:Create(menuScale, openInfo, {Scale = fitScale}):Play()
+    TweenService:Create(MainFrame, TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+        {GroupTransparency = 0}):Play()
 end
-clearBtn.MouseButton1Click:Connect(function()
-	Steal.rarities = {}
-	for _, name in ipairs(RARITIES) do renderChip(name) end
+
+closeMenu = function()
+    menuOpen = false
+    menuToken += 1
+    local token = menuToken
+    local t = TweenService:Create(menuScale, closeInfo, {Scale = fitScale * 0.8})
+    TweenService:Create(MainFrame, closeInfo, {GroupTransparency = 1}):Play()
+    t:Play()
+    t.Completed:Connect(function()
+        if token == menuToken then MainFrame.Visible = false end
+    end)
+end
+
+toggleMenu = function()
+    if menuOpen then closeMenu() else openMenu() end
+end
+
+-- ===== Animation ប៊ូតុងអណ្ដែត =====
+local floatScale = new("UIScale", {Scale = 0}, FloatButton)
+TweenService:Create(floatScale, TweenInfo.new(0.5, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Scale = 1}):Play()
+
+FloatButton.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        TweenService:Create(floatScale, TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Scale = 0.88}):Play()
+    end
+end)
+FloatButton.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        TweenService:Create(floatScale, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Scale = 1}):Play()
+    end
 end)
 
--- MOD
-local mods = makeSection(stealPage, "MOD", 2, false)
-local modButtons = {}
-local function renderMods()
-	for name, m in pairs(modButtons) do
-		local on = name == Steal.mode
-		tween(m.btn, 0.12, {BackgroundColor3 = on and Color3.fromRGB(48, 52, 96) or PANEL2})
-		m.stroke.Color = on and ACCENT or PANEL2
-		m.dot.BackgroundColor3 = on and ACCENT or STROKE
-	end
-end
-for i, m in ipairs(MODES) do
-	local b = new("TextButton", {
-		Size = UDim2.new(1, 0, 0, 42), BackgroundColor3 = PANEL2, Text = "", AutoButtonColor = false, LayoutOrder = i,
-	}, mods)
-	corner(b, 8)
-	local st = stroke(b, PANEL2, 1.5)
-	local n = label(b, m.name, 13, TEXT, Enum.Font.GothamBold)
-	n.Size = UDim2.new(1, -40, 0, 18)
-	n.Position = UDim2.fromOffset(12, 5)
-	local d = label(b, m.desc, 11, MUTED)
-	d.Size = UDim2.new(1, -40, 0, 14)
-	d.Position = UDim2.fromOffset(12, 23)
-	local dot = new("Frame", {Size = UDim2.fromOffset(12, 12), Position = UDim2.new(1, -24, 0.5, -6), BackgroundColor3 = STROKE}, b)
-	corner(dot, 6)
-	modButtons[m.name] = {btn = b, stroke = st, dot = dot}
-	b.MouseButton1Click:Connect(function()
-		Steal.mode = m.name
-		renderMods()
-	end)
-end
-renderMods()
-for _, name in ipairs(RARITIES) do renderChip(name) end
-
--- Settings Config tab
-local refreshers = {}
-local function addStepper(parent, order, title, get, set, minV, maxV, stepV, suffix)
-	local row = new("Frame", {Size = UDim2.new(1, 0, 0, 34), BackgroundColor3 = PANEL2, LayoutOrder = order}, parent)
-	corner(row, 8)
-	local t = label(row, title, 12, TEXT, Enum.Font.GothamMedium)
-	t.Size = UDim2.new(1, -140, 1, 0)
-	t.Position = UDim2.fromOffset(10, 0)
-	local function mk(txt, x)
-		local b = new("TextButton", {
-			Size = UDim2.fromOffset(26, 24), Position = UDim2.new(1, x, 0.5, -12), BackgroundColor3 = PANEL,
-			Text = txt, TextColor3 = TEXT, TextSize = 16, Font = Enum.Font.GothamBold, AutoButtonColor = false,
-		}, row)
-		corner(b, 6)
-		return b
-	end
-	local minus = mk("−", -126)
-	local plus = mk("+", -36)
-	local val = label(row, "", 12, TEXT, Enum.Font.GothamBold, Enum.TextXAlignment.Center)
-	val.Size = UDim2.fromOffset(60, 34)
-	val.Position = UDim2.new(1, -98, 0, 0)
-	local function refresh() val.Text = tostring(get()) .. suffix end
-	minus.MouseButton1Click:Connect(function() set(math.clamp(get() - stepV, minV, maxV)) refresh() end)
-	plus.MouseButton1Click:Connect(function() set(math.clamp(get() + stepV, minV, maxV)) refresh() end)
-	refresh()
-	table.insert(refreshers, refresh)
-end
-
-local tweenCfg = makeSection(settingsPage, "Movement Settings", 1, true)
-addStepper(tweenCfg, 1, "Hold at egg", function() return Steal.holdSeconds end, function(v) Steal.holdSeconds = v end, 1, 10, 1, "s")
-addStepper(tweenCfg, 2, "Speed", function() return Steal.speed end, function(v) Steal.speed = v end, MIN_SPEED, MAX_SPEED, 50, "")
-
-local CONFIG_FILE = "OLIVER_AutoSteal.json"
-local cfgSection = makeSection(settingsPage, "Config", 2, true)
-local cfgRow = new("Frame", {Size = UDim2.new(1, 0, 0, 32), BackgroundTransparency = 1, LayoutOrder = 1}, cfgSection)
-local cfgMsg = label(cfgSection, "", 11, MUTED)
-cfgMsg.Size = UDim2.new(1, 0, 0, 16)
-cfgMsg.LayoutOrder = 2
-
-local function cfgNotify(text, good)
-	cfgMsg.Text = text
-	cfgMsg.TextColor3 = good and GREEN or Color3.fromRGB(255, 110, 110)
-	task.delay(2.5, function()
-		if cfgMsg.Text == text then cfgMsg.Text = "" end
-	end)
-end
-
-local function refreshAll()
-	renderMods()
-	for _, name in ipairs(RARITIES) do renderChip(name) end
-	for _, f in ipairs(refreshers) do f() end
-end
-
-local function cfgReset()
-	Steal.mode = "High Speed User Normal"
-	Steal.rarities = {}
-	Steal.holdSeconds = 5
-	Steal.speed = 600
-	refreshAll()
-end
-
-local function cfgSave()
-	if type(writefile) ~= "function" then return false, "Executor has no writefile" end
-	local rars = {}
-	for n in pairs(Steal.rarities) do table.insert(rars, n) end
-	local data = {
-		mode = Steal.mode, rarities = rars, hold = Steal.holdSeconds, speed = Steal.speed,
-	}
-	local ok, err = pcall(function() writefile(CONFIG_FILE, HttpService:JSONEncode(data)) end)
-	return ok, ok and "Saved" or tostring(err)
-end
-
-local function cfgLoad()
-	if type(readfile) ~= "function" or type(isfile) ~= "function" then return false, "Executor has no readfile" end
-	if not isfile(CONFIG_FILE) then return false, "No saved config" end
-	local ok, data = pcall(function() return HttpService:JSONDecode(readfile(CONFIG_FILE)) end)
-	if not ok or type(data) ~= "table" then return false, "Config file is invalid" end
-	for _, m in ipairs(MODES) do
-		if m.name == data.mode then Steal.mode = m.name end
-	end
-	Steal.rarities = {}
-	for _, n in ipairs(type(data.rarities) == "table" and data.rarities or {}) do
-		if RARITY_COLORS[n] then Steal.rarities[n] = true end
-	end
-	Steal.holdSeconds = math.clamp(tonumber(data.hold) or 5, 1, 10)
-	Steal.speed = math.clamp(tonumber(data.speed) or 600, MIN_SPEED, MAX_SPEED)
-	refreshAll()
-	return true, "Loaded"
-end
-
-local function cfgButton(text, x, color, fn)
-	local b = new("TextButton", {
-		Size = UDim2.new(1 / 3, -4, 1, 0), Position = UDim2.new(x, 0, 0, 0), BackgroundColor3 = color,
-		Text = text, TextColor3 = Color3.new(1, 1, 1), TextSize = 12, Font = Enum.Font.GothamBold, AutoButtonColor = false,
-	}, cfgRow)
-	corner(b, 8)
-	b.MouseButton1Click:Connect(function()
-		local ok, msg = fn()
-		cfgNotify(msg, ok)
-	end)
-end
-cfgButton("Save", 0, Color3.fromRGB(70, 100, 230), cfgSave)
-cfgButton("Load", 1 / 3, Color3.fromRGB(60, 150, 110), cfgLoad)
-cfgButton("Reset", 2 / 3, Color3.fromRGB(150, 70, 80), function() cfgReset() return true, "Reset to default" end)
-
--- Floating logo button
-local hasLogo = LOGO_ID ~= "" and not LOGO_ID:match("^rbxassetid://0?$")
-local fab = new("ImageButton", {
-	Size = UDim2.fromOffset(54, 54), Position = UDim2.new(0, 16, 0.5, -27),
-	BackgroundColor3 = PANEL, Image = hasLogo and LOGO_ID or "", ScaleType = Enum.ScaleType.Crop,
-	AutoButtonColor = false, ZIndex = 20,
-}, gui)
-corner(fab, 27)
-stroke(fab, ACCENT, 2)
-if not hasLogo then
-	local l = label(fab, TITLE:sub(1, 1), 24, ACCENT, Enum.Font.GothamBold, Enum.TextXAlignment.Center)
-	l.Size = UDim2.new(1, 0, 1, 0)
-	l.ZIndex = 21
-end
-local liveDot = new("Frame", {
-	Size = UDim2.fromOffset(12, 12), Position = UDim2.new(1, -14, 0, 2), BackgroundColor3 = GREEN, Visible = false, ZIndex = 22,
-}, fab)
-corner(liveDot, 6)
-stroke(liveDot, BG, 2)
-
-local opened = true
-local function setOpen(v)
-	opened = v
-	if v then
-		main.Visible = true
-		scale.Scale = 0.85
-		TweenService:Create(scale, TweenInfo.new(0.18, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Scale = 1}):Play()
-	else
-		tween(scale, 0.12, {Scale = 0.85})
-		task.delay(0.12, function()
-			if not opened then main.Visible = false end
-		end)
-	end
-end
-local fabMoved = makeDraggable(fab, fab)
-fab.MouseButton1Click:Connect(function()
-	if not fabMoved() then setOpen(not opened) end
+FloatButton.MouseButton1Click:Connect(function()
+    if not floatDrag.moved then
+        toggleMenu()
+    end
 end)
-closeBtn.MouseButton1Click:Connect(function() setOpen(false) end)
 
-selectTab("Main")
+-- ===== Loading UI ពេញអេក្រង់ =====
+local LoadingGui = new("ScreenGui", {Name = "OliverLoading", ResetOnSpawn = false, IgnoreGuiInset = true,
+    DisplayOrder = 999, ZIndexBehavior = Enum.ZIndexBehavior.Sibling}, guiParent)
+-- ពេញអេក្រង់ពិតប្រាកដ: មិនទុក Inset ណាមួយ (Notch/Safe Area/Top bar)
+pcall(function() LoadingGui.ScreenInsets = Enum.ScreenInsets.None end)
 
--- Live update
+-- Loading ធំជាងអេក្រង់ 200px គ្រប់ទិស (ចំកណ្ដាលដដែល) ដើម្បីគ្របគែមទាំងអស់ គ្មានគម្លាត
+-- ប្រើ Frame ធម្មតា (មិនមែន CanvasGroup) ដើម្បីឱ្យអក្សរមុត មិនព្រិល
+local Loading = new("Frame", {Name = "Loading", AnchorPoint = Vector2.new(0.5, 0.5),
+    Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.new(1, 400, 1, 400),
+    BackgroundColor3 = Color3.fromRGB(8, 8, 16), BackgroundTransparency = 0, BorderSizePixel = 0,
+    Visible = false}, LoadingGui)
+
+local LoadBg = new("Frame", {Size = UDim2.fromScale(1, 1), BackgroundColor3 = WHITE, BorderSizePixel = 0,
+    ZIndex = 0, Active = false}, Loading)
+gradient(LoadBg, Color3.fromRGB(26, 18, 52), Color3.fromRGB(6, 8, 18), 90)
+
+local function center(yOffset)
+    return UDim2.new(0.5, 0, 0.5, yOffset)
+end
+
+-- Logo ចំកណ្ដាល + Ring វិល
+local LoadLogo = makeLogo(Loading, UDim2.fromOffset(88, 88), center(-60), 3)
+LoadLogo.AnchorPoint = Vector2.new(0.5, 0.5)
+
+local Ring = new("Frame", {Size = UDim2.fromOffset(122, 122), AnchorPoint = Vector2.new(0.5, 0.5),
+    Position = center(-60), BackgroundTransparency = 1}, Loading)
+corner(Ring, UDim.new(1, 0))
+local ringStroke = stroke(Ring, WHITE, 3, 0)
+local ringGrad = new("UIGradient", {Color = ColorSequence.new(ACCENT_1, ACCENT_2), Transparency = NumberSequence.new({
+    NSK(0, 0), NSK(0.55, 0.85), NSK(1, 1),
+})}, ringStroke)
+
+local LoadLabel = label(Loading, "Loading", 26, Enum.Font.GothamBlack, WHITE, center(28),
+    UDim2.fromOffset(260, 34), Enum.TextXAlignment.Center)
+LoadLabel.AnchorPoint = Vector2.new(0.5, 0)
+LoadLabel.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+LoadLabel.TextStrokeTransparency = 0.45
+
+local LoadSub = label(Loading, "OLIVER v3 • Steal Egg", 16, Enum.Font.GothamBold, Color3.fromRGB(235, 235, 255),
+    center(66), UDim2.fromOffset(300, 24), Enum.TextXAlignment.Center)
+LoadSub.AnchorPoint = Vector2.new(0.5, 0)
+LoadSub.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+LoadSub.TextStrokeTransparency = 0.55
+
+local BarTrack = new("Frame", {Size = UDim2.fromOffset(240, 8), AnchorPoint = Vector2.new(0.5, 0),
+    Position = center(102), BackgroundColor3 = WHITE, BackgroundTransparency = 0.85, BorderSizePixel = 0}, Loading)
+corner(BarTrack, UDim.new(1, 0))
+local BarFill = new("Frame", {Size = UDim2.new(0, 0, 1, 0), BackgroundColor3 = WHITE, BorderSizePixel = 0}, BarTrack)
+corner(BarFill, UDim.new(1, 0))
+gradient(BarFill, ACCENT_1, ACCENT_2, 0)
+
+local LoadPct = label(Loading, "0%", 16, Enum.Font.GothamBold, WHITE,
+    center(120), UDim2.fromOffset(100, 22), Enum.TextXAlignment.Center)
+LoadPct.AnchorPoint = Vector2.new(0.5, 0)
+LoadPct.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+LoadPct.TextStrokeTransparency = 0.55
+
+local loadingToken = 0
+local loadingConn = nil
+
+local function showLoading(duration)
+    if not SHOW_LOADING then return end
+    loadingToken += 1
+    Loading.Visible = true
+
+    local startT = os.clock()
+    BarFill.Size = UDim2.new(0, 0, 1, 0)
+    if loadingConn then loadingConn:Disconnect() end
+    loadingConn = RunService.RenderStepped:Connect(function(dt)
+        ringGrad.Rotation = (ringGrad.Rotation + dt * 400) % 360
+        LoadLabel.Text = "Loading" .. string.rep(".", math.floor(os.clock() * 3) % 4)
+        local p = math.clamp((os.clock() - startT) / math.max(duration, 0.01), 0, 1)
+        BarFill.Size = UDim2.new(p, 0, 1, 0)
+        LoadPct.Text = math.floor(p * 100) .. "%"
+    end)
+end
+
+local function hideLoading()
+    if not SHOW_LOADING then return end
+    loadingToken += 1
+    BarFill.Size = UDim2.new(1, 0, 1, 0)
+    LoadPct.Text = "100%"
+    Loading.Visible = false
+    if loadingConn then
+        loadingConn:Disconnect()
+        loadingConn = nil
+    end
+end
+
+-- ===== ប្រព័ន្ធ Anti Guard & Camera =====
+local antiGuardActive = false
+local currentTween = nil
+local busy = false
+
+local function resetCamera()
+    local cam = Workspace.CurrentCamera
+    local char = player.Character
+    local hum = char and char:FindFirstChildOfClass("Humanoid")
+    if cam and hum then
+        cam.CameraType = Enum.CameraType.Custom
+        cam.CameraSubject = hum
+    end
+end
+
+local camFollowUntil = 0
+local camHoldCF = nil
+local camOffset = Vector3.new(0, 8, 14)
+local camSettleCF, camSettleUntil = nil, 0
+
+pcall(function() RunService:UnbindFromRenderStep("OliverCamFollow") end)
+RunService:BindToRenderStep("OliverCamFollow", Enum.RenderPriority.Last.Value, function()
+    if camHoldCF then
+        local cam = Workspace.CurrentCamera
+        if cam then
+            if cam.CameraType ~= Enum.CameraType.Scriptable then
+                cam.CameraType = Enum.CameraType.Scriptable
+            end
+            cam.CFrame = camHoldCF
+        end
+        return
+    end
+
+    if camSettleCF and os.clock() < camSettleUntil then
+        local cam = Workspace.CurrentCamera
+        if cam then cam.CFrame = camSettleCF end
+        return
+    end
+
+    if os.clock() > camFollowUntil then return end
+
+    local cam = Workspace.CurrentCamera
+    local char = player.Character
+    local root = char and char:FindFirstChild("HumanoidRootPart")
+    local hum = char and char:FindFirstChildOfClass("Humanoid")
+    if not (cam and root and hum) then return end
+
+    if cam.CameraType ~= Enum.CameraType.Custom then
+        cam.CameraType = Enum.CameraType.Custom
+    end
+    if cam.CameraSubject ~= hum then
+        cam.CameraSubject = hum
+    end
+
+    if (cam.CFrame.Position - root.Position).Magnitude > 45 then
+        local rot = cam.CFrame - cam.CFrame.Position
+        cam.CFrame = CFrame.new(root.Position + camOffset) * rot
+    end
+end)
+
+local function goTo(rootPart, cf, t)
+    if currentTween then currentTween:Cancel() end
+    currentTween = TweenService:Create(rootPart, TweenInfo.new(t, Enum.EasingStyle.Linear), {CFrame = cf})
+    currentTween:Play()
+    currentTween.Completed:Wait()
+    rootPart.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+end
+
+local function runAntiGuard(rootPart, safeZone)
+    busy = true
+    showLoading(TWEEN_TIME + STAY_TIME + RETURN_TIME)
+
+    local cam = Workspace.CurrentCamera
+    if cam then
+        local off = cam.CFrame.Position - rootPart.Position
+        if off.Magnitude > 3 and off.Magnitude < 45 then
+            camOffset = off
+        else
+            camOffset = Vector3.new(0, 8, 14)
+        end
+    end
+    camFollowUntil = 0
+    if cam then camHoldCF = cam.CFrame end
+
+    local origin = rootPart.CFrame
+    local target = safeZone.CFrame + Vector3.new(0, 3, 0)
+
+    -- ១. ទៅ SafeZone
+    goTo(rootPart, target, TWEEN_TIME)
+
+    -- ២. នៅ SafeZone + Glitch
+    local t0 = os.clock()
+    while os.clock() - t0 < STAY_TIME do
+        if not rootPart.Parent then break end
+        if GLITCH then
+            rootPart.CFrame = target * CFrame.new(math.random(-20, 20) / 10, 0, math.random(-20, 20) / 10)
+        else
+            rootPart.CFrame = target
+        end
+        rootPart.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+        task.wait()
+    end
+
+    -- ៣. ត្រឡប់ទៅកន្លែងដើម
+    if rootPart.Parent then
+        rootPart.CFrame = target
+        if RETURN_BACK then
+            goTo(rootPart, origin, RETURN_TIME)
+        end
+    end
+    camSettleCF, camSettleUntil = camHoldCF, os.clock() + 0.4
+    camHoldCF = nil
+    camFollowUntil = os.clock() + 1.5
+    resetCamera()
+    task.delay(0.15, resetCamera)
+    task.delay(0.6, resetCamera)
+    hideLoading()
+    busy = false
+end
+
+-- ===== Instant Prompt (HoldDuration = 0) =====
+local instantPromptActive = false
+local instantAddedConn = nil
+local instantToken = 0
+local instantConns = setmetatable({}, {__mode = "k"})
+
+local function applyInstantPrompt(inst)
+    if not inst:IsA("ProximityPrompt") then return end
+    if inst:GetAttribute("OliverOrigHold") == nil then
+        inst:SetAttribute("OliverOrigHold", inst.HoldDuration)
+    end
+    inst.HoldDuration = 0
+    -- បើហ្គេមកែតម្លៃត្រឡប់វិញ → កំណត់ជា 0 ម្តងទៀត
+    if not instantConns[inst] then
+        instantConns[inst] = inst:GetPropertyChangedSignal("HoldDuration"):Connect(function()
+            if instantPromptActive and inst.HoldDuration ~= 0 then
+                inst.HoldDuration = 0
+            end
+        end)
+    end
+end
+
+local function restoreInstantPrompt(inst)
+    if not inst:IsA("ProximityPrompt") then return end
+    local orig = inst:GetAttribute("OliverOrigHold")
+    if orig ~= nil then
+        inst.HoldDuration = orig
+        inst:SetAttribute("OliverOrigHold", nil)
+    end
+end
+
+local function setInstantPrompt(on)
+    instantPromptActive = on
+    instantToken += 1
+    local token = instantToken
+
+    if instantAddedConn then
+        instantAddedConn:Disconnect()
+        instantAddedConn = nil
+    end
+
+    if on then
+        instantAddedConn = Workspace.DescendantAdded:Connect(function(inst)
+            task.defer(applyInstantPrompt, inst)
+        end)
+        task.spawn(function()
+            for i, inst in ipairs(Workspace:GetDescendants()) do
+                if token ~= instantToken then return end
+                applyInstantPrompt(inst)
+                if i % 1500 == 0 then task.wait() end
+            end
+        end)
+    else
+        for inst, conn in pairs(instantConns) do
+            conn:Disconnect()
+            instantConns[inst] = nil
+        end
+        task.spawn(function()
+            for i, inst in ipairs(Workspace:GetDescendants()) do
+                if token ~= instantToken then return end
+                restoreInstantPrompt(inst)
+                if i % 1500 == 0 then task.wait() end
+            end
+        end)
+    end
+end
+
+-- ===== ESP (Rarity + Icon Pet) =====
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local espActive = false
+local espToken = 0
+local ESP_TAG = "__OliverEspGui"
+
+local function safeRequire(path)
+    local ok, result = pcall(function() return require(path) end)
+    return ok and result or nil
+end
+
+local espAssets, espEggState, espAreaEggs
+pcall(function()
+    espAssets = safeRequire(ReplicatedStorage.Data.Assets)
+    espEggState = safeRequire(ReplicatedStorage.Client.EggState)
+    espAreaEggs = safeRequire(ReplicatedStorage.Shared.Types.AreaEggs)
+end)
+local ESP_READY = (espAssets and espEggState and espAreaEggs) and true or false
+if not ESP_READY then warn("[ESP] Game modules not found") end
+
+local function espResolve(record)
+    local asset = record and espAssets.Directory[record.AssetCategory]
+    local rarity = asset and asset.Rarity
+    return {
+        rarity = rarity and (rarity.DisplayName or rarity._id) or "Unknown",
+        color = rarity and typeof(rarity.Color) == "Color3" and rarity.Color or WHITE,
+        icon = asset and type(asset.Icon) == "string" and asset.Icon or nil,
+    }
+end
+
+local function clearEsp()
+    local folder = Workspace:FindFirstChild("AreaEggSlotsClient")
+    if not folder then return end
+    for _, slot in ipairs(folder:GetChildren()) do
+        local g = slot:FindFirstChild(ESP_TAG)
+        if g then g:Destroy() end
+    end
+end
+
+local function buildEspGui(slot, hitbox)
+    local g = new("BillboardGui", {Name = ESP_TAG, AlwaysOnTop = true, Size = UDim2.fromOffset(160, 64),
+        StudsOffset = Vector3.new(0, 4.4, 0), MaxDistance = 1000, Adornee = hitbox}, slot)
+    new("ImageLabel", {Name = "Icon", AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0, 0),
+        Size = UDim2.fromOffset(36, 36), BackgroundTransparency = 1, ScaleType = Enum.ScaleType.Fit,
+        Visible = false}, g)
+    new("TextLabel", {Name = "Text", AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0, 38),
+        Size = UDim2.new(1, 0, 0, 22), BackgroundTransparency = 1, Font = Enum.Font.GothamBold,
+        TextSize = 14, TextStrokeTransparency = 0.35, Text = ""}, g)
+    return g
+end
+
+local function updateEsp()
+    if not ESP_READY then return end
+    local folder = Workspace:FindFirstChild("AreaEggSlotsClient")
+    if not folder then return end
+
+    local records = {}
+    local snapshot = espEggState.ReadFieldEggs()
+    for _, rec in pairs(snapshot and (snapshot.Records or snapshot) or {}) do
+        if type(rec) == "table" and type(rec.Uid) == "string" then
+            records[rec.Uid] = rec
+        end
+    end
+
+    for _, slot in ipairs(folder:GetChildren()) do
+        local rec = records[slot.Name]
+        local visible = espActive and rec ~= nil
+            and (rec.State == espAreaEggs.States.Slot or rec.State == espAreaEggs.States.Dropped)
+        local hitbox = visible and (slot:FindFirstChild("Hitbox") or slot:FindFirstChildWhichIsA("BasePart", true))
+        local g = slot:FindFirstChild(ESP_TAG)
+
+        if not hitbox then
+            if g then g:Destroy() end
+        else
+            local info = espResolve(rec)
+            g = g or buildEspGui(slot, hitbox)
+            g.Adornee = hitbox
+
+            local icon = g:FindFirstChild("Icon")
+            icon.Image = info.icon or ""
+            icon.Visible = info.icon ~= nil and info.icon ~= ""
+
+            local txt = g:FindFirstChild("Text")
+            txt.Text = string.upper(info.rarity)
+            txt.TextColor3 = info.color
+        end
+    end
+end
+
+local function setEsp(on)
+    espActive = on
+    espToken += 1
+    local token = espToken
+    if on then
+        task.spawn(function()
+            while espActive and token == espToken do
+                local ok, err = pcall(updateEsp)
+                if not ok then warn("[ESP] update error: " .. tostring(err)) end
+                task.wait(0.4)
+            end
+        end)
+    else
+        pcall(clearEsp)
+    end
+end
+
+-- ===== Switch + Status =====
+local function refreshStatus()
+    local parts = {}
+    if antiGuardActive then table.insert(parts, "Anti Guard") end
+    if #parts > 0 then
+        Status.Text = "Status: " .. table.concat(parts, " + ") .. " ON"
+        tween(Status, 0.2, {TextColor3 = ON_COLOR})
+        tween(StatusDot, 0.2, {BackgroundColor3 = ON_COLOR})
+    else
+        Status.Text = "Status: OFF"
+        tween(Status, 0.2, {TextColor3 = DIM})
+        tween(StatusDot, 0.2, {BackgroundColor3 = OFF_COLOR})
+    end
+end
+
+AntiGuardCard.Button.MouseButton1Click:Connect(function()
+    antiGuardActive = not antiGuardActive
+    AntiGuardCard.Set(antiGuardActive)
+    refreshStatus()
+    print(antiGuardActive and "[Anti Guard] Activated!" or "[Anti Guard] Deactivated!")
+end)
+
+-- ===== ភ្ជាប់ Event ជាមួយ ProximityPrompt =====
+local function setupPrompt(prompt)
+    if prompt:IsA("ProximityPrompt") then
+        if not prompt:GetAttribute("UltimateHooked") then
+            prompt:SetAttribute("UltimateHooked", true)
+
+            prompt.Triggered:Connect(function(plr)
+                if plr == player and antiGuardActive then
+                    print("[Anti Guard]  Stealing eggs in progress...")
+
+                    local character = player.Character
+                    if character and character:FindFirstChild("HumanoidRootPart") then
+                        local rootPart = character.HumanoidRootPart
+
+                        local safeZone = Workspace:FindFirstChild("World")
+                            and Workspace.World:FindFirstChild("Areas")
+                            and Workspace.World.Areas:FindFirstChild("EggCarryBounds")
+                            and Workspace.World.Areas.EggCarryBounds:FindFirstChild("SafeZone")
+
+                        if safeZone then
+                            if not busy then
+                                task.spawn(function()
+                                    local ok, err = pcall(runAntiGuard, rootPart, safeZone)
+                                    if not ok then
+                                        warn("[Anti Guard] Error: " .. tostring(err))
+                                        camHoldCF = nil
+                                        hideLoading()
+                                        busy = false
+                                    end
+                                end)
+                            end
+                        else
+                            warn("[Anti Guard] SafeZone not found!")
+                        end
+                    end
+                end
+            end)
+        end
+    end
+end
+
 task.spawn(function()
-	while gui.Parent do
-		toggleSub.Text = Steal.status
-		liveDot.Visible = Steal.enabled
-		task.wait(0.25)
-	end
+    print("[Anti Guard] Waiting for AreaEggSlotsClient...")
+
+    local areaSlots = Workspace:WaitForChild("AreaEggSlotsClient", 60)
+
+    if areaSlots then
+        print("[Anti Guard] AreaEggSlotsClient detected!")
+
+        for _, obj in pairs(areaSlots:GetDescendants()) do
+            setupPrompt(obj)
+        end
+
+        areaSlots.DescendantAdded:Connect(function(obj)
+            task.wait(0.1)
+            setupPrompt(obj)
+        end)
+    end
 end)
 
--- ផ្ទុក config ដែលបានរក្សាទុក (បើមាន)
-pcall(cfgLoad)
+-- Backup: ស្កេនទូទាំង Workspace
+task.spawn(function()
+    for _, obj in pairs(Workspace:GetDescendants()) do
+        setupPrompt(obj)
+    end
+
+    Workspace.DescendantAdded:Connect(function(obj)
+        task.wait(0.1)
+        setupPrompt(obj)
+    end)
+end)
